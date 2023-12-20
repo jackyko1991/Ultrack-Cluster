@@ -2,7 +2,7 @@
 
 #SBATCH --job-name=DATABASE
 #SBATCH --time=24:00:00
-#SBATCH --partition=cpu
+#SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --mem=100G
@@ -12,9 +12,14 @@
 
 env | grep "^SLURM" | sort
 
-DB_DIR="/hpc/mydata/$USER/postgresql_ultrack"
+module load PostgreSQL/15.2-GCCcore-12.2.0
+
+# DB_DIR="/hpc/mydata/$USER/postgresql_ultrack"
+GROUP_NAME=$(getent group $GROUPS | cut -d: -f1)
+DB_DIR="/users/$GROUP_NAME/$USER/work/postgresql_ultrack"
 DB_NAME="ultrack"
-DB_SOCKET_DIR="/tmp"
+# DB_SOCKET_DIR="/tmp"
+DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp"
 
 # fixing error "FATAL:  unsupported frontend protocol 1234.5679: server supports 2.0 to 3.0"
 # reference: https://stackoverflow.com/questions/59190010/psycopg2-operationalerror-fatal-unsupported-frontend-protocol-1234-5679-serve

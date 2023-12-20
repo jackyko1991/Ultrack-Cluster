@@ -161,3 +161,6 @@ cython_debug/
 
 # custom files
 *.zarr
+*.out
+*.err
+src/*

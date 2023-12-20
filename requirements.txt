@@ -1,0 +1,2 @@
+dask-image
+-e git+https://github.com/royerlab/ultrack#egg=ultrack

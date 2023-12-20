@@ -6,17 +6,34 @@ BMRC cluster run test script for [Ultrack](https://github.com/royerlab/ultrack)
 This version of distributed running is not available on pypi yet. Users may install the nightly code until the next release: 
 
 ```bash
-$ pip install git+https://github.com/royerlab/ultrack
+# TODO: update to conda env.yml + requirements.txt install
+$ mamba create -n ultrack python=3.10
+$ mamba activate ultrack
+$ pip install -r requirements.txt
+
+# if pip exceed system tmp size
+$ TMPDIR=~/work/tmp pip install -r requirements.txt
 ```
 
 This repository contains essential SLURM scripts that calls ultrack CLI run. The files are equivalent to `segment`, `link` and `solve` function in the ultrack Python API.
 
 Details are modified to fit the BMRC SLURM and infrastructure setup. It provides a reference code for cluster run modification.
 
+### PostgreSQL Server Setup
+Most cluster environment may not come with all necessary tools for the PostgreSQL server setup in [create_server.sh](./tracking/create_server.sh). For an automated software installation (script dedicated to BMRC folder structure but you may modify to fit your system's installation environment), edit `$INSTALL_DIR` in `install_server_dependency.sh` then run:
+```bash
+bash install_server_dependency.sh
+source ~/.bashrc
+```
+
 ### Environment Variable
 You need a environment variable `$ULTRACK_DB_PW` used in the `create_server.sh`
 
-### Folder Structure
+### Quick Run
+#### Data Perquisite
+For convenience data IO, the segmentation file input is in zarr format. For quick data conversion from tiff format to zarr, check [tiff_to_zarr.py](./preprocess/tiff_to_zarr.py). Cluster run script is available in [tiff_to_zarr.sbatch](./preprocess/tiff_to_zarr.sbatch)
+
+#### Folder Structures
 It assumes the following directory structure, you can modify the file paths as you wish on the `main.sh`
 
 ```
@@ -31,15 +48,15 @@ root/
 
 In the `main.sh`, you must fill `DS_LENGTH` and `NUM_WINDOWS` variables. These files are used as a template in my workflow, and a Python script fills this information.
 
-For example, for a dataset with 225 time points and `window_size` of 50 (from the `config.toml`) we have:
+For example, for a dataset with 225 time points and `window_size` of 50 (from the [`config.toml`](./tracking/config.toml)) we have:
 ``` bash
 DS_LENGTH = 224  # 225 - 1
-NUM_WINDOS = 4  # ceil(225 / 50) - 1
+NUM_WINDOWS = 4  # ceil(225 / 50) - 1
 ```
 
+#### Automated Scripts
 And then you execute `bash main.sh`. You must stop the database job once the tracking is done.
 
-## Quick Example
 
 
 ## FAQ

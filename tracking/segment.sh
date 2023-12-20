@@ -2,7 +2,7 @@
 
 #SBATCH --job-name=SEGMENT
 #SBATCH --time=00:25:00
-#SBATCH --partition=cpu
+#SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --mem=100G
@@ -11,8 +11,8 @@
 
 env | grep "^SLURM" | sort
 
-module load anaconda/2022.05
-conda activate dexpv2
+conda activate ultrack
 
-ultrack segment $1 -cfg $CFG_FILE \
-    -b $SLURM_ARRAY_TASK_ID -r napari-ome-zarr -el edge -dl detection
+# ultrack segment $1 -cfg $CFG_FILE \
+#     -b $SLURM_ARRAY_TASK_ID -r napari-ome-zarr -el edge -dl detection
+python segment.py -p $1 --cfg $CFG_FILE -b $SLURM_ARRAY_TASK_ID
