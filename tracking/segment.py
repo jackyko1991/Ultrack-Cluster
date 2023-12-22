@@ -28,7 +28,7 @@ def get_args():
     parser.add_argument(
         '-b', '--batch_index',
         type=int,
-        metavar="INT"
+        metavar="INT",
         dest="batch_index",
         help="Batch index to process a subset of time points. ATTENTION: this it not the time index."
         )

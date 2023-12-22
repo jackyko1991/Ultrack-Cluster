@@ -57,7 +57,18 @@ NUM_WINDOWS = 4  # ceil(225 / 50) - 1
 #### Automated Scripts
 And then you execute `bash main.sh`. You must stop the database job once the tracking is done.
 
+#### Manual Run
+1. Start PostgreSQL DB server
+    ```bash
+    # script based run from head node
+    export ULTRACK_DB_PW="ultrack_pw"
+    sbatch create_server.sh
 
+    # pty bash session run
+    srun -p short --pty bash
+    export ULTRACK_DB_PW="ultrack_pw"
+    bash create_server.sh
+    ```
 
 ## FAQ
 1. **Can the label information in the SQL database being reused at different tracking stages?**

@@ -19,10 +19,10 @@ mkdir -p slurm_output
 SERVER_JOB_ID=$(sbatch --partition $PARTITION --parsable create_server.sh)
 echo "Server creation job submited (ID: $SERVER_JOB_ID)"
 
-exit
-
 # SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh ../segmentation.zarr)
 SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh $LABEL_PATH_PATTERN)
+
+exit
 
 if [[ -d "../flow.zarr" ]]; then
     FLOW_JOB_ID=$(sbatch --partition $PARTITION --parsable --mem 120GB --cpus-per-task=2 --job-name FLOW \
