@@ -1,7 +1,7 @@
 #! /bin/bash
 
-DS_LENGTH=500
-NUM_WINDOWS=5
+DS_LENGTH=1500 # number of time points
+NUM_WINDOWS=155 # ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
 PARTITION=short # short/long on BMRC
 
 # IMAGE_PATH_PATTERN="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged/t/tcells/*.tif"
@@ -19,6 +19,7 @@ mkdir -p slurm_output
 SERVER_JOB_ID=$(sbatch --partition $PARTITION --parsable create_server.sh)
 echo "Server creation job submited (ID: $SERVER_JOB_ID)"
 
+# create 200 node workers for the segmentation
 # SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh ../segmentation.zarr)
 SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh $LABEL_PATH_PATTERN)
 

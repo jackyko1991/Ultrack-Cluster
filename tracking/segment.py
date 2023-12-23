@@ -4,9 +4,11 @@ import dask_image.imread
 from ultrack.utils import estimate_parameters_from_labels, labels_to_edges
 from ultrack.utils.array import array_apply, create_zarr
 from scipy.ndimage import gaussian_filter
-from ultrack import segment
+from ultrack import segment, MainConfig, load_config
 
+from rich.pretty import pprint
 import argparse
+import numpy as np
 
 def get_args():
     parser = argparse.ArgumentParser(description="CLI worker for ultrack segment task")
@@ -46,29 +48,44 @@ def get_args():
 def main(args):
     # read image
     LABEL_PATH_PATTERN = args.path
-    # image = dask_image.imread.imread(IMAGE_PATH_PATTERN)
-    label = dask_image.imread.imread(LABEL_PATH_PATTERN)
+    label = dask_image.imread.imread(LABEL_PATH_PATTERN)[:100,:,:]
 
-    # print(image.shape)
     print(label.shape)
 
-    # sigma_xy = 1.0
-    # sigma_t = 1.2
+    sigma_xy = 1.0
+    sigma_t = 1.2
 
-    # detection, edges = labels_to_edges(
-    #     label, 
-    # )
+    # can this be done by multi nodes?
+    detection, edges = labels_to_edges(
+        label, 
+    )
 
-    # # perform gaussian blur to create fuzzy edges in space and time
-    # edges_blur=gaussian_filter(edges, sigma=[sigma_t,sigma_xy,sigma_xy])
+    # perform gaussian blur to create fuzzy edges in space and time
+    edges_blur=gaussian_filter(edges, sigma=[sigma_t,sigma_xy,sigma_xy])
 
-    # segment(
-    #     detection,
-    #     edges_blur,
-    #     config,
-    #     batch_index=batch_index,
-    #     overwrite=overwrite,
-    # )
+    # TODO: Apply array apply for the labels to edges conversion to zarr format
+    # convert detection and edges to zarr
+    # detection = create_zarr(label.shape, bool, store_or_path="./detection.zarr",overwrite=True)
+    # edges = create_zarr(label.shape, np.float, store_or_path="./edge.zarr",overwrite=True)
+
+    # array_apply(
+    #     label,
+    #     out_array=detection,
+    #     func=labels_to_edges,
+    #     )
+
+    # load config file
+    cfg = load_config(args.cfg)
+    pprint(cfg)
+
+    # add segment to database
+    segment(
+        detection,
+        edges,
+        cfg,
+        batch_index=args.batch_index, # how do the SLURM_ARRAY_TASK_ID work here? slurm array ranges from 0 to $DS_LENGTH%200, not quite sure how the max slurm array task id is obtained
+        overwrite=True,
+    )
 
 if __name__ == "__main__":
     """
