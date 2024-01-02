@@ -1,5 +1,5 @@
 [data]
-address = 'jackyko:ultrack_pw@localhost:5432/ultrack?gssencmode=disable'
+address = 'oyk357:ultrack_pw@compe009:5432/ultrack?gssencmode=disable'
 database = 'postgresql'
 n_workers = 1
 working_dir = '.'
@@ -32,4 +32,4 @@ overlap_size = 5
 power = 4
 solution_gap = 0.0
 time_limit = 120000
-window_size = 100
+window_size = 25

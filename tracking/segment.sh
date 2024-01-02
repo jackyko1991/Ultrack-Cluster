@@ -7,12 +7,12 @@
 #SBATCH --nodes=1
 #SBATCH --mem=100G
 #SBATCH --cpus-per-task=1
-#SBATCH --output=./slurm_output/segment-%A_%a.out
+#SBATCH --output=./slurm_output/segment/segment-%A_%a.out
 
 env | grep "^SLURM" | sort
 
-conda activate ultrack
+# conda activate ultrack
 
 # ultrack segment $1 -cfg $CFG_FILE \
 #     -b $SLURM_ARRAY_TASK_ID -r napari-ome-zarr -el edge -dl detection
-python segment.py -p $1 --cfg $CFG_FILE -b $SLURM_ARRAY_TASK_ID
+python segment.py -p "$1" --cfg $CFG_FILE -b $SLURM_ARRAY_TASK_ID -l $DS_LENGTH

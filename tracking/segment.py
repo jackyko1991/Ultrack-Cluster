@@ -29,6 +29,7 @@ def get_args():
         )
     parser.add_argument(
         '-b', '--batch_index',
+        default=None,
         type=int,
         metavar="INT",
         dest="batch_index",
@@ -41,16 +42,35 @@ def get_args():
         default=1,
         help='Verbosity level (0, 1 or 2, default is 1)'
         )
+    parser.add_argument(
+        '-l', '--length',
+        metavar="INT",
+        dest="length",
+        type=int,
+        default=-1,
+        help='Maximum time steps to process'
+    )
 
     args = parser.parse_args()
     return args
 
 def main(args):
+    # load config file
+    cfg = load_config(args.cfg)
+    pprint(cfg)
+    # print(cfg.segmentation_config.n_workers)
+
     # read image
     LABEL_PATH_PATTERN = args.path
-    label = dask_image.imread.imread(LABEL_PATH_PATTERN)[:100,:,:]
-
-    print(label.shape)
+    label = dask_image.imread.imread(LABEL_PATH_PATTERN)[0:args.length+1,:,:]
+    # if args.batch_index is None:
+    #     label = dask_image.imread.imread(LABEL_PATH_PATTERN)
+    # else:
+    #     # TODO: gaussian blur in time need to load more than 1 slice
+    #     label_dask = dask_image.imread.imread(LABEL_PATH_PATTERN)
+    #     print("Image shape (t,y,x):", label_dask.shape)
+    #     T_STACK_SIZE = 5
+    #     label = label_dask[args.batch_index:args.batch_index+1,:,:]
 
     sigma_xy = 1.0
     sigma_t = 1.2
@@ -63,27 +83,12 @@ def main(args):
     # perform gaussian blur to create fuzzy edges in space and time
     edges_blur=gaussian_filter(edges, sigma=[sigma_t,sigma_xy,sigma_xy])
 
-    # TODO: Apply array apply for the labels to edges conversion to zarr format
-    # convert detection and edges to zarr
-    # detection = create_zarr(label.shape, bool, store_or_path="./detection.zarr",overwrite=True)
-    # edges = create_zarr(label.shape, np.float, store_or_path="./edge.zarr",overwrite=True)
-
-    # array_apply(
-    #     label,
-    #     out_array=detection,
-    #     func=labels_to_edges,
-    #     )
-
-    # load config file
-    cfg = load_config(args.cfg)
-    pprint(cfg)
-
     # add segment to database
     segment(
         detection,
         edges,
         cfg,
-        batch_index=args.batch_index, # how do the SLURM_ARRAY_TASK_ID work here? slurm array ranges from 0 to $DS_LENGTH%200, not quite sure how the max slurm array task id is obtained
+        batch_index=args.batch_index,
         overwrite=True,
     )
 

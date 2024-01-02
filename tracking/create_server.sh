@@ -28,7 +28,8 @@ DB_ADDR="$USER:$ULTRACK_DB_PW@$SLURM_JOB_NODELIST:5432/ultrack?gssencmode=disabl
 # update config file
 echo ""
 echo "Server running on uri $DB_ADDR"
-dasel put string -f $CFG_FILE "data.address" $DB_ADDR
+dasel put -t string -f $CFG_FILE -v $DB_ADDR "data.address" 
+# dasel put string -f $CFG_FILE "data.address" $DB_ADDR
 echo "Updated $CFG_FILE"
 
 rm -r $DB_DIR

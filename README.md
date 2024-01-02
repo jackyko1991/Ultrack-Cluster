@@ -46,29 +46,24 @@ root/
         ... # other .sh files
 ```
 
-In the `main.sh`, you must fill `DS_LENGTH` and `NUM_WINDOWS` variables. These files are used as a template in my workflow, and a Python script fills this information.
-
-For example, for a dataset with 225 time points and `window_size` of 50 (from the [`config.toml`](./tracking/config.toml)) we have:
-``` bash
-DS_LENGTH = 224  # 225 - 1
-NUM_WINDOWS = 4  # ceil(225 / 50) - 1
-```
-
 #### Automated Scripts
-And then you execute `bash main.sh`. You must stop the database job once the tracking is done.
+1. Change the working directory to `tracking`
+2. Activate the global virtual environment
+    ```bash
+    mamba activate ultrack
+    ```
+2. In the `main.sh`, you must fill `DS_LENGTH` and `NUM_WINDOWS` variables. These files are used as a template in my workflow, and a Python script fills this information.
+
+    For example, for a dataset with 225 time points and `window_size` of 50 (from the [`config.toml`](./tracking/config.toml)) we have:
+
+    ``` bash
+    DS_LENGTH = 224  # 225 - 1
+    NUM_WINDOWS = 4  # ceil(225 / 50) - 1
+    ```
+4. And then you execute `bash main.sh`. You must stop the database job once the tracking is done.
 
 #### Manual Run
-1. Start PostgreSQL DB server
-    ```bash
-    # script based run from head node
-    export ULTRACK_DB_PW="ultrack_pw"
-    sbatch create_server.sh
-
-    # pty bash session run
-    srun -p short --pty bash
-    export ULTRACK_DB_PW="ultrack_pw"
-    bash create_server.sh
-    ```
+Check the file [manual_run.md](./manual_run.md)
 
 ## FAQ
 1. **Can the label information in the SQL database being reused at different tracking stages?**

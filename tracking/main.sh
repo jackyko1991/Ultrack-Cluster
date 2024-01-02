@@ -1,11 +1,10 @@
 #! /bin/bash
 
-DS_LENGTH=1500 # number of time points
-NUM_WINDOWS=155 # ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
+DS_LENGTH=8640 # number of time points
+NUM_WINDOWS=86 # ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
 PARTITION=short # short/long on BMRC
 
-# IMAGE_PATH_PATTERN="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged/t/tcells/*.tif"
-LABEL_PATH_PATTERN="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged_masks/tcells/*.tif"
+LABEL_PATH_PATTERN=\"/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged_masks/tcell/*.tif\"
 
 export CFG_FILE="config.toml"
 export ULTRACK_DB_PW="ultrack_pw"
@@ -13,17 +12,23 @@ export ULTRACK_DB_PW="ultrack_pw"
 
 conda activate ultrack
 
+# clean log dir
 rm ./slurm_output/*.out -f
+rm ./slurm_output/segment/*.out -f
+rm ./slurm_output/link/*.out -f
+rm ./slurm_output/solve/*.out -f
+
 mkdir -p slurm_output
+mkdir -p slurm_output/segment
+mkdir -p slurm_output/link
+mkdir -p slurm_output/solve
 
 SERVER_JOB_ID=$(sbatch --partition $PARTITION --parsable create_server.sh)
 echo "Server creation job submited (ID: $SERVER_JOB_ID)"
 
 # create 200 node workers for the segmentation
 # SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh ../segmentation.zarr)
-SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh $LABEL_PATH_PATTERN)
-
-exit
+SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh "$LABEL_PATH_PATTERN")
 
 if [[ -d "../flow.zarr" ]]; then
     FLOW_JOB_ID=$(sbatch --partition $PARTITION --parsable --mem 120GB --cpus-per-task=2 --job-name FLOW \
