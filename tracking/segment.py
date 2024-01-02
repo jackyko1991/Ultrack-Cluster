@@ -5,6 +5,7 @@ from ultrack.utils import estimate_parameters_from_labels, labels_to_edges
 from ultrack.utils.array import array_apply, create_zarr
 from scipy.ndimage import gaussian_filter
 from ultrack import segment, MainConfig, load_config
+from ultrack.utils.multiprocessing import batch_index_range
 
 from rich.pretty import pprint
 import argparse
@@ -62,26 +63,31 @@ def main(args):
 
     # read image
     LABEL_PATH_PATTERN = args.path
-    label = dask_image.imread.imread(LABEL_PATH_PATTERN)[0:args.length+1,:,:]
-    # if args.batch_index is None:
-    #     label = dask_image.imread.imread(LABEL_PATH_PATTERN)
-    # else:
-    #     # TODO: gaussian blur in time need to load more than 1 slice
-    #     label_dask = dask_image.imread.imread(LABEL_PATH_PATTERN)
-    #     print("Image shape (t,y,x):", label_dask.shape)
-    #     T_STACK_SIZE = 5
-    #     label = label_dask[args.batch_index:args.batch_index+1,:,:]
+    label = dask_image.imread.imread(LABEL_PATH_PATTERN)[0:args.length+1]
+
+    # same function used in `segment` call below
+    time_points = list(batch_index_range(
+        label.shape[0],
+        cfg.segmentation_config.n_workers,
+        args.batch_index,
+    ))
 
     sigma_xy = 1.0
     sigma_t = 1.2
 
-    # can this be done by multi nodes?
-    detection, edges = labels_to_edges(
-        label, 
-    )
+    # I'm assuming it fits into memory, zarr.TempStore could be used otherwise
+    detection = create_zarr(label.shape, dtype=np.bool)
+    edges = create_zarr(label, dtype=np.float32)
+
+    # compute edges and detection for a subset of points
+    for t in time_points:
+        t_det, t_edges = labels_to_edges(np.asarray(label[t]))
+        detection[t] = t_det
+        edges[t] = t_edges
 
     # perform gaussian blur to create fuzzy edges in space and time
-    edges_blur=gaussian_filter(edges, sigma=[sigma_t,sigma_xy,sigma_xy])
+    # FIXME: not embarrassingly parallel if sigma_t > 0
+    # edges_blur = gaussian_filter(edges, sigma=[sigma_t,sigma_xy,sigma_xy])
 
     # add segment to database
     segment(
@@ -91,6 +97,7 @@ def main(args):
         batch_index=args.batch_index,
         overwrite=True,
     )
+
 
 if __name__ == "__main__":
     """
