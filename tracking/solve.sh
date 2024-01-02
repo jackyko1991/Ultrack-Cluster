@@ -11,6 +11,7 @@
 
 env | grep "^SLURM" | sort
 
+module load Gurobi/10.0.1-GCCcore-12.2.0
 # module load anaconda/2022.05
 # conda activate dexpv2
 
