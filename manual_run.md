@@ -45,7 +45,7 @@
     export DS_LENGTH=<max-time-steps>
     export LABEL_PATH_PATTERN=<path-to-label-tiff-dir>
 
-    # cpu only, change the values witin <brackets>
+    # cpu only, change the values within <brackets>
     sbatch --array=0-$DS_LENGTH%<MAX-JOBS> segment.sh "$LABEL_PATH_PATTERN"
 
     # gpu
@@ -71,3 +71,9 @@
         SOLVE_JOB_ID_1=$(sbatch --array=1-$NUM_WINDOWS:2 -d afterok:$SOLVE_JOB_ID_0 solve.sh)
     fi
     ```
+
+7. Result merging
+    ```bash
+    sbatch -d afterok:$SOLVE_JOB_ID_1 export.sh
+    ```
+
