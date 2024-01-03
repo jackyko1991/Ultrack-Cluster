@@ -1,5 +1,5 @@
 [data]
-address = 'oyk357:ultrack_pw@compe009:5432/ultrack?gssencmode=disable'
+address = 'oyk357:ultrack_pw@compe036:5432/ultrack?gssencmode=disable'
 database = 'postgresql'
 n_workers = 1
 working_dir = '.'

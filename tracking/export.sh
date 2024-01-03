@@ -5,8 +5,18 @@
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --mem=500G
-#SBATCH --cpus-per-task=50
+#SBATCH --mem=100G
+#SBATCH --cpus-per-task=16
 #SBATCH --output=./slurm_output/export-%j.out
 
-ultrack export zarr-napari -cfg $CFG_FILE -o results --measure -r napari-ome-zarr -i ../result.zarr
+directory="$PWD/results"
+
+if [ ! -d "$directory" ]; then
+    mkdir -p "$directory"
+    echo "Directory created: $directory"
+else
+    echo "Directory already exists: $directory"
+fi
+
+
+ultrack export zarr-napari -cfg $CFG_FILE -o "$directory"

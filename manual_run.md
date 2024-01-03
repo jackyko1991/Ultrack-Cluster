@@ -32,7 +32,21 @@
     ssh -L 5432:compe009:5432 oyk357@cluster2.bmrc.ox.ac.uk
     ```
 
-    Then you can access the childnode DB with URL [localhost:5432](localhost:5432)
+    Then you can access the childnode DB with URI [localhost:5432](localhost:5432)
+
+    ## Resume Existing PostgreSQL
+    ```bash
+    # script based run from head node
+    export ULTRACK_DB_PW="ultrack_pw"
+    export CFG_FILE=./config.toml
+    sbatch resume_server.sh
+
+    # pty bash session run
+    srun -p short --pty bash
+    export ULTRACK_DB_PW="ultrack_pw"
+    export CFG_FILE=./config.toml
+    bash resume_server.sh
+    ```
 
 3. (Optional) DB clean up
     ```bash

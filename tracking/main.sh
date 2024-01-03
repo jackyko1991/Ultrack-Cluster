@@ -4,7 +4,7 @@ DS_LENGTH=8640 # number of time points
 NUM_WINDOWS=86 # ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
 PARTITION=short # short/long on BMRC
 
-LABEL_PATH_PATTERN=\"/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged_masks/tcell/*.tif\"
+LABEL_PATH_PATTERN="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged_masks/tcell/*.tif"
 
 export CFG_FILE="config.toml"
 export ULTRACK_DB_PW="ultrack_pw"
