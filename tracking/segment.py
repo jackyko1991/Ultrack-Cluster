@@ -11,6 +11,18 @@ from rich.pretty import pprint
 import argparse
 import numpy as np
 
+def valid_blur_steps_type(value):
+    """
+    Custom argparse type for temporal Gaussian blur steps given from the command line
+    """
+    if value is None or value.lower=="none":
+        return None
+    elif int(value) % 2 != 0:
+        return value
+    else:
+        raise argparse.ArgumentTypeError("Value must be an odd integer, or None")
+
+
 def get_args():
     parser = argparse.ArgumentParser(description="CLI worker for ultrack segment task")
     
@@ -51,6 +63,14 @@ def get_args():
         default=-1,
         help='Maximum time steps to process'
     )
+    parser.add_argument(
+        '-bs','--blur_steps',
+        metavar="ODD INT",
+        dest="blur_steps",
+        type=valid_blur_steps_type,
+        default=None,
+        help='Temporal Gaussian blur stack size. Has to be odd integer for symmetry. If None or 1 then temporal blur is skipped (default is None)'
+    )
 
     args = parser.parse_args()
     return args
@@ -59,7 +79,6 @@ def main(args):
     # load config file
     cfg = load_config(args.cfg)
     pprint(cfg)
-    # print(cfg.segmentation_config.n_workers)
 
     # read image
     LABEL_PATH_PATTERN = args.path
@@ -76,18 +95,28 @@ def main(args):
     sigma_t = 1.2
 
     # I'm assuming it fits into memory, zarr.TempStore could be used otherwise
-    detection = create_zarr(label.shape, dtype=np.bool)
-    edges = create_zarr(label, dtype=np.float32)
+    detection = create_zarr(label.shape, dtype=np.bool_)
+    edges = create_zarr(label.shape, dtype=np.float32)
+
+    if args.blur_steps not in ["1", None]:
+        # load padding slices for temporal blurring
+        padding_t = int(args.blur_steps)%2
+        for _ in range(padding_t):
+            time_points.insert(0,time_points[0]-1)
+            time_points.append(time_points[-1]+1)
+
+        # filter out of range indices
+        time_points = [x for x in time_points if 0 <= x < args.length]
 
     # compute edges and detection for a subset of points
     for t in time_points:
-        t_det, t_edges = labels_to_edges(np.asarray(label[t]))
-        detection[t] = t_det
-        edges[t] = t_edges
+        t_det, t_edges = labels_to_edges(np.asarray(label[t:t+1,:,:])) # accept only list of labels, retains time dim for readability
+        detection[t:t+1,:,:] = t_det
+        edges[t:t+1,:,:] = t_edges
 
     # perform gaussian blur to create fuzzy edges in space and time
-    # FIXME: not embarrassingly parallel if sigma_t > 0
-    # edges_blur = gaussian_filter(edges, sigma=[sigma_t,sigma_xy,sigma_xy])
+    if sigma_t > 0 and args.blur_steps not in ["1", None]:
+        edges[time_points[0]:time_points[-1]+1] = gaussian_filter(edges[time_points[0]:time_points[-1]+1], sigma=[sigma_t,sigma_xy,sigma_xy])
 
     # add segment to database
     segment(
@@ -97,7 +126,6 @@ def main(args):
         batch_index=args.batch_index,
         overwrite=True,
     )
-
 
 if __name__ == "__main__":
     """
