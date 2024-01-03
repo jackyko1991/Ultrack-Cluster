@@ -18,5 +18,4 @@ else
     echo "Directory already exists: $directory"
 fi
 
-
-ultrack export zarr-napari -cfg $CFG_FILE -o "$directory"
+ultrack export zarr-napari -cfg $CFG_FILE -o "$directory" -ow
