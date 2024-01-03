@@ -7,21 +7,10 @@ from scipy.ndimage import gaussian_filter
 from ultrack import segment, MainConfig, load_config
 from ultrack.utils.multiprocessing import batch_index_range
 
+import zarr
 from rich.pretty import pprint
 import argparse
 import numpy as np
-
-def valid_blur_steps_type(value):
-    """
-    Custom argparse type for temporal Gaussian blur steps given from the command line
-    """
-    if value is None or value.lower=="none":
-        return None
-    elif int(value) % 2 != 0:
-        return value
-    else:
-        raise argparse.ArgumentTypeError("Value must be an odd integer, or None")
-
 
 def get_args():
     parser = argparse.ArgumentParser(description="CLI worker for ultrack segment task")
@@ -64,12 +53,12 @@ def get_args():
         help='Maximum time steps to process'
     )
     parser.add_argument(
-        '-bs','--blur_steps',
-        metavar="ODD INT",
-        dest="blur_steps",
-        type=valid_blur_steps_type,
-        default=None,
-        help='Temporal Gaussian blur stack size. Has to be odd integer for symmetry. If None or 1 then temporal blur is skipped (default is None)'
+        '-bp','--blur_padding',
+        metavar="INT",
+        dest="blur_padding",
+        type=int,
+        default=0,
+        help='Temporal Gaussian blur stack padding. Default is zero'
     )
 
     args = parser.parse_args()
@@ -91,17 +80,17 @@ def main(args):
         args.batch_index,
     ))
 
+    # TODO: exterior sigma control
     sigma_xy = 1.0
     sigma_t = 1.2
 
     # I'm assuming it fits into memory, zarr.TempStore could be used otherwise
-    detection = create_zarr(label.shape, dtype=np.bool_)
-    edges = create_zarr(label.shape, dtype=np.float32)
+    detection = create_zarr(label.shape, dtype=np.bool_,store_or_path=zarr.MemoryStore)
+    edges = create_zarr(label.shape, dtype=np.float32,store_or_path=zarr.MemoryStore)
 
-    if args.blur_steps not in ["1", None]:
+    if args.blur_padding != 0:
         # load padding slices for temporal blurring
-        padding_t = int(args.blur_steps)%2
-        for _ in range(padding_t):
+        for _ in range(args.blur_padding):
             time_points.insert(0,time_points[0]-1)
             time_points.append(time_points[-1]+1)
 
@@ -115,7 +104,7 @@ def main(args):
         edges[t:t+1,:,:] = t_edges
 
     # perform gaussian blur to create fuzzy edges in space and time
-    if sigma_t > 0 and args.blur_steps not in ["1", None]:
+    if sigma_t > 0 and args.blur_padding != 0:
         edges[time_points[0]:time_points[-1]+1] = gaussian_filter(edges[time_points[0]:time_points[-1]+1], sigma=[sigma_t,sigma_xy,sigma_xy])
 
     # add segment to database
