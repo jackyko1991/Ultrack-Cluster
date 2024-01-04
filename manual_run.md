@@ -50,6 +50,8 @@
 
 3. (Optional) DB clean up
     ```bash
+    srun -p short --pty bash
+    mamba activate ultrack
     ultrack clear_database -cfg ./config.toml {all|links|solutions}
     ```
 
