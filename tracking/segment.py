@@ -85,8 +85,8 @@ def main(args):
     sigma_t = 1.2
 
     # I'm assuming it fits into memory, zarr.TempStore could be used otherwise
-    detection = create_zarr(label.shape, dtype=np.bool_,store_or_path=zarr.MemoryStore)
-    edges = create_zarr(label.shape, dtype=np.float32,store_or_path=zarr.MemoryStore)
+    detection = create_zarr(label.shape, dtype=np.bool_,store_or_path=zarr.MemoryStore())
+    edges = create_zarr(label.shape, dtype=np.float32,store_or_path=zarr.MemoryStore())
 
     if args.blur_padding != 0:
         # load padding slices for temporal blurring

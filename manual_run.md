@@ -69,7 +69,7 @@
 
     In the segmentation task sbatch will return the `SLURM_ARRAY_JOB_ID`. This is exported as `$SEGM_JOB_ID` for convenience.
     ```bash
-    sbatch --array=0-$((DS_LENGTH - 1))%200 -d afterok:$SEGM_JOB_ID link.sh
+    sbatch --array=0-$((DS_LENGTH - 1))%<MAX-JOBS> -d afterok:$SEGM_JOB_ID link.sh
     ```
 
 6. Solve the tracking optimization problem. To achieve so first check the `$NUM_WINDOWS`, where 
