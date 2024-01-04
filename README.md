@@ -52,15 +52,30 @@ root/
     ```bash
     mamba activate ultrack
     ```
-2. In the `main.sh`, you must fill `DS_LENGTH` and `NUM_WINDOWS` variables. These files are used as a template in my workflow, and a Python script fills this information.
+2. In the `main.sh`, you must fill `DS_LENGTH`, `NUM_WINDOWS`, `LABEL_PATH_PATTERN` and `MAX_JOBS` variables. These files are used as a template in my workflow, and a Python script fills this information.
 
     For example, for a dataset with 225 time points and `window_size` of 50 (from the [`config.toml`](./tracking/config.toml)) we have:
 
     ``` bash
     DS_LENGTH = 224  # 225 - 1
     NUM_WINDOWS = 4  # ceil(225 / 50) - 1
+
+    LABEL_PATH_PATTERN="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged_masks/tcell/*.tif"
+    MAX_JOBS=100
     ```
+
+    `MAX_JOBS` limited the simultaneous tasks for a job task. PostgreSQL only allow limited connection and we set the job count here. Possible to extend with PostgreSQL setting.
+    
 4. And then you execute `bash main.sh`. You must stop the database job once the tracking is done.
+    ```bash
+    # check running SLURM job ID
+    $ squeue --me 
+    # JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+    # 42037054     short DATABASE   oyk357  R       1:42      1 compe042
+
+    # stop database node
+    $ scancel 42037054
+    ```
 
 #### Manual Run
 Check the file [manual_run.md](./manual_run.md)
