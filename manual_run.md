@@ -92,4 +92,3 @@
     ```bash
     sbatch -d afterok:$SOLVE_JOB_ID_1 export.sh
     ```
-
