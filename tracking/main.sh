@@ -1,7 +1,7 @@
 #! /bin/bash
 
-DS_LENGTH=99 # number of time points - 1
-NUM_WINDOWS=3 # ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
+export DS_LENGTH=2499 # number of time points - 1
+NUM_WINDOWS=124 # ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
 PARTITION=short # short/long on BMRC
 
 LABEL_PATH_PATTERN="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged_masks/tcell/*.tif"
