@@ -1,8 +1,9 @@
 #! /bin/bash
 
-export DS_LENGTH=2499 # number of time points - 1
-NUM_WINDOWS=124 # ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
-PARTITION=short # short/long on BMRC
+export DS_LENGTH=8639 # number of time points - 1
+NUM_WINDOWS=431 # ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
+PARTITION=long # short/long on BMRC
+DELAY_AFTER_DB_SERVER=5 # ultrack start time delay after database server creation, in minutes
 
 LABEL_PATH_PATTERN="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged_masks/tcell/*.tif"
 MAX_JOBS=100
@@ -29,7 +30,7 @@ echo "Server creation job submited (ID: $SERVER_JOB_ID)"
 
 # create 200 node workers for the segmentation
 # SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh ../segmentation.zarr)
-SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%$MAX_JOBS -d after:$SERVER_JOB_ID+1 segment.sh "$LABEL_PATH_PATTERN")
+SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%$MAX_JOBS -d after:$SERVER_JOB_ID+$DELAY_AFTER_DB_SERVER segment.sh "$LABEL_PATH_PATTERN")
 
 if [[ -d "../flow.zarr" ]]; then
     FLOW_JOB_ID=$(sbatch --partition $PARTITION --parsable --mem 120GB --cpus-per-task=2 --job-name FLOW \
