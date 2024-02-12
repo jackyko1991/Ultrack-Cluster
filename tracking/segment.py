@@ -103,7 +103,7 @@ def main(args):
             time_points.append(time_points[-1]+1)
 
         # filter out of range indices
-        time_points = [x for x in time_points if 0 <= x <= args.length]
+        time_points = [x for x in time_points if 0 <= x <= args.length][::args.scale]
 
     # compute edges and detection for a subset of points
     for t in time_points:
