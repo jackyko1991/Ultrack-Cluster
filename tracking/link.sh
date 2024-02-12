@@ -5,7 +5,7 @@
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --mem=48G
+#SBATCH --mem=15G
 #SBATCH --cpus-per-task=1
 #SBATCH --output=./slurm_output/link/link-%A_%a.out
 

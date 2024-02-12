@@ -60,6 +60,14 @@ def get_args():
         default=0,
         help='Temporal Gaussian blur stack padding. Default is zero'
     )
+    parser.add_argument(
+        '-s','--scale',
+        metavar="INT",
+        dest="scale",
+        type=int,
+        default=1,
+        help='Temporal binning scale, default to be 1'
+    )
 
     args = parser.parse_args()
     return args
@@ -71,7 +79,7 @@ def main(args):
 
     # read image
     LABEL_PATH_PATTERN = args.path
-    label = dask_image.imread.imread(LABEL_PATH_PATTERN)[0:args.length+1]
+    label = dask_image.imread.imread(LABEL_PATH_PATTERN)[0:args.length+1:args.scale]
 
     # same function used in `segment` call below
     time_points = list(batch_index_range(

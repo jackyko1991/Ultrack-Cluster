@@ -1,7 +1,7 @@
 #! /bin/bash
 
 #SBATCH --job-name=EXPORT
-#SBATCH --time=00:25:00
+#SBATCH --time=24:00:00
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
@@ -9,7 +9,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --output=./slurm_output/export-%j.out
 
-directory="$PWD/results"
+directory="$PWD/results/$JOBNAME"
 
 if [ ! -d "$directory" ]; then
     mkdir -p "$directory"

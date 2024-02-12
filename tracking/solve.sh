@@ -5,7 +5,7 @@
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --mem=400G
+#SBATCH --mem=300G
 #SBATCH --cpus-per-task=20
 #SBATCH --output=./slurm_output/solve/solve-%A_%a.out
 

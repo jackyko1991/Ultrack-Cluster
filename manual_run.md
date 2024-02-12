@@ -92,3 +92,8 @@
     ```bash
     sbatch -d afterok:$SOLVE_JOB_ID_1 export.sh
     ```
+
+8. (Optional) DB export
+    ```bash
+    pg_dump -f data.sql -d ultrack -h <NODE> -p <PORT> -U $USER
+    ```

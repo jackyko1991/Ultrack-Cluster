@@ -1,8 +1,8 @@
 #!/usr/bin/sh
 
 #SBATCH --job-name=DATABASE
-#SBATCH --time=24:00:00
-#SBATCH --partition=short
+#SBATCH --time=1-00:00:00
+#SBATCH --partition=long
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --mem=100G
@@ -16,10 +16,16 @@ module load PostgreSQL/15.2-GCCcore-12.2.0
 
 # DB_DIR="/hpc/mydata/$USER/postgresql_ultrack"
 GROUP_NAME=$(getent group $GROUPS | cut -d: -f1)
-DB_DIR="/users/$GROUP_NAME/$USER/work/postgresql_ultrack"
+DB_DIR="/users/$GROUP_NAME/$USER/work/postgresql_ultrack_$JOB_NAME"
 DB_NAME="ultrack"
 # DB_SOCKET_DIR="/tmp"
-DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp"
+DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp_$JOB_NAME"
+if [ ! -d "$DB_SOCKET_DIR" ]; then
+    mkdir -p "$DB_SOCKET_DIR"
+    echo "DB socket directory created: $DB_SOCKET_DIR"
+else
+    echo "DB socket directory already exists: $DB_SOCKET_DIR"
+fi
 
 # fixing error "FATAL:  unsupported frontend protocol 1234.5679: server supports 2.0 to 3.0"
 # reference: https://stackoverflow.com/questions/59190010/psycopg2-operationalerror-fatal-unsupported-frontend-protocol-1234-5679-serve
@@ -27,10 +33,10 @@ DB_ADDR="$USER:$ULTRACK_DB_PW@$SLURM_JOB_NODELIST:5432/ultrack?gssencmode=disabl
 
 # update config file
 echo ""
-echo "Server running on uri $DB_ADDR"
+echo "$(date +'%Y-%m-%d %H:%M:%S') Server running on uri $DB_ADDR"
 dasel put -t string -f $CFG_FILE -v $DB_ADDR "data.address" 
 # dasel put string -f $CFG_FILE "data.address" $DB_ADDR
-echo "Updated $CFG_FILE"
+echo "$(date +'%Y-%m-%d %H:%M:%S') Updated $CFG_FILE"
 
 rm -r $DB_DIR
 mkdir -p $DB_DIR
@@ -42,6 +48,7 @@ unix_socket_directories = '$DB_SOCKET_DIR'
 EOF
 
 # creating database
+echo "$(date +'%Y-%m-%d %H:%M:%S') Initializing DB..."
 pg_ctl start -D $DB_DIR
 
 # allowing $USER network access
@@ -65,7 +72,9 @@ psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET logging_collector TO 'on';" $DB_NAME
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_wal_size TO '10GB';" $DB_NAME
 
 # restart database
+echo "$(date +'%Y-%m-%d %H:%M:%S') Restarting DB..."
 pg_ctl stop -D $DB_DIR
+echo "$(date +'%Y-%m-%d %H:%M:%S') Ultrack DB service ready"
 postgres -i -D $DB_DIR
 
 # STOP:
