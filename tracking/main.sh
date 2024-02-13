@@ -1,9 +1,9 @@
 #! /bin/bash
 ################# FILE CONFIGURATIONS ################# 
 DATA_DIR="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged_masks/tcell"
-export JOB_NAME="20231017_roi-0_binT-3_tcell"
-export BINNING=20
-MAX_JOBS=100
+export BINNING=400
+export JOB_NAME="20231017_roi-0_binT-$((BINNING))_tcell"
+MAX_JOBS=100 # DB concurrency limit
 export CFG_FILE="config_binning.toml"
 export ULTRACK_DB_PW="ultrack_pw"
 # export ULTRACK_DEBUG=1
@@ -47,7 +47,7 @@ NUM_WINDOWS=$(ceil $NUM_WINDOWS)
 NUM_WINDOWS=$((NUM_WINDOWS-1))
 
 echo "Slices detected from $DATA_DIR: $TIME_STEPS"
-echo "Binning temporally in $BINNING times, result in $TIME_STEPS_BINNED steps"
+echo "Binning temporally in $BINNING times, resulting in $TIME_STEPS_BINNED steps"
 echo "Track window size = $WINDOW_SIZE, windows count = $NUM_WINDOWS"
 
 # conda activate ultrack
@@ -95,4 +95,14 @@ fi
 #     --output=./slurm_output/export-%j.out -d afterok:$SOLVE_JOB_ID_1 \
 #     ultrack export zarr-napari -cfg $CFG_FILE -o results \
 #     --measure -r napari-ome-zarr -i ../fused.zarr
-sbatch --job-name "EXPORT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/export-%j.out" -d afterok:$SOLVE_JOB_ID_1 export.sh
+EXPORT_JOB_ID=$(sbatch --job-name "EXPORT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/export-%j.out" -d afterok:$SOLVE_JOB_ID_1 export.sh)
+
+# # stop DB server after job completion
+# while true; do
+#     if [[ $(squeue -j $SEGM_JOB_ID | wc -l) -eq 1 ]]; then
+#         scancel $SERVER_JOB_ID
+#         echo "DB server job stopped"
+#         break
+#     fi
+#     sleep 60  # Check every minute
+# done

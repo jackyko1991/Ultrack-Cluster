@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --mem=100G
-#SBATCH --cpus-per-task=10
+#SBATCH --cpus-per-task=20
 #SBATCH --dependency=singleton
 #SBATCH --output=./slurm_output/database-%j.out
 

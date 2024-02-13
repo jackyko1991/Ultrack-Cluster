@@ -79,7 +79,10 @@ def main(args):
 
     # read image
     LABEL_PATH_PATTERN = args.path
-    label = dask_image.imread.imread(LABEL_PATH_PATTERN)[0:args.length+1:args.scale]
+    if args.length != -1:
+        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[0:args.length+1:args.scale]
+    else:
+        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[::args.scale]
 
     # same function used in `segment` call below
     time_points = list(batch_index_range(
@@ -103,7 +106,7 @@ def main(args):
             time_points.append(time_points[-1]+1)
 
         # filter out of range indices
-        time_points = [x for x in time_points if 0 <= x <= args.length][::args.scale]
+        time_points = [x for x in time_points if 0 <= x <= label.shape[0]]
 
     # compute edges and detection for a subset of points
     for t in time_points:

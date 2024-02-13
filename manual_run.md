@@ -95,5 +95,6 @@
 
 8. (Optional) DB export
     ```bash
+    export JOB_NAME="<JOB_NAME>"
     pg_dump -f data.sql -d ultrack -h <NODE> -p <PORT> -U $USER
     ```
