@@ -18,5 +18,4 @@ env | grep "^SLURM" | sort
 
 # binning will automatically take care of length of data, for specfic time range edit in main.sh
 # reserver length for reference
-# python segment.py -p "$1" --cfg $CFG_FILE -b $SLURM_ARRAY_TASK_ID -l $DS_LENGTH -bp 3
-python segment.py -p "$1" --cfg $CFG_FILE -b $SLURM_ARRAY_TASK_ID -bp 3 -s $BINNING
+python segment.py -p "$1" --cfg $CFG_FILE -b $BEGIN_TIME -e $END_TIME -bi $SLURM_ARRAY_TASK_ID -bp 3

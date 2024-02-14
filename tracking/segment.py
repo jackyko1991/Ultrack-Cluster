@@ -30,7 +30,7 @@ def get_args():
         help='Path to Ultrack configuration file (.toml)'
         )
     parser.add_argument(
-        '-b', '--batch_index',
+        '-bi', '--batch_index',
         default=None,
         type=int,
         metavar="INT",
@@ -45,12 +45,20 @@ def get_args():
         help='Verbosity level (0, 1 or 2, default is 1)'
         )
     parser.add_argument(
-        '-l', '--length',
+        '-b', '--begin',
         metavar="INT",
-        dest="length",
+        dest="begin",
+        type=int,
+        default=0,
+        help='First time steps to process'
+    )
+    parser.add_argument(
+        '-e', '--end',
+        metavar="INT",
+        dest="end",
         type=int,
         default=-1,
-        help='Maximum time steps to process'
+        help='Last time steps to process'
     )
     parser.add_argument(
         '-bp','--blur_padding',
@@ -79,10 +87,10 @@ def main(args):
 
     # read image
     LABEL_PATH_PATTERN = args.path
-    if args.length != -1:
-        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[0:args.length+1:args.scale]
+    if args.end != -1:
+        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[args.begin:args.end+1:args.scale]
     else:
-        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[::args.scale]
+        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[args.begin,-1,args.scale]
 
     # same function used in `segment` call below
     time_points = list(batch_index_range(
