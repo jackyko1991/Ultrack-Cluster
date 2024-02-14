@@ -11,6 +11,7 @@ import zarr
 from rich.pretty import pprint
 import argparse
 import numpy as np
+import socket
 
 def get_args():
     parser = argparse.ArgumentParser(description="CLI worker for ultrack segment task")
@@ -83,6 +84,7 @@ def get_args():
 def main(args):
     # load config file
     cfg = load_config(args.cfg)
+    MAX_RETRIES=3
     pprint(cfg)
 
     # read image
@@ -127,13 +129,40 @@ def main(args):
         edges[time_points[0]:time_points[-1]+1] = gaussian_filter(edges[time_points[0]:time_points[-1]+1], sigma=[sigma_t,sigma_xy,sigma_xy])
 
     # add segment to database
-    segment(
-        detection,
-        edges,
-        cfg,
-        batch_index=args.batch_index,
-        overwrite=True,
-    )
+    ip = cfg.data_config.address.split("@")[1].split(":")[0]
+    port = 5432
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            # Create a TCP socket
+            print(f"Attempting add segment to DB@{ip} on port {port} ({attempt}/{MAX_RETRIES})")
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # Set a timeout for the connection attempt
+            s.settimeout(5)
+            # Attempt to connect to the IP and port
+            s.connect((ip, port))
+            # If connection is successful, print a success message
+            print(f"Connected to DB@{ip} on port {port}")
+            # Close the socket after use
+            s.close()
+            segment(
+                detection,
+                edges,
+                cfg,
+                batch_index=args.batch_index,
+                overwrite=True,
+            )
+            print("Adding segmentation to DB success")
+            break
+        except socket.error as e:
+            # If connection fails, print an error message
+            print(f"Attempt {attempt}/{MAX_RETRIES}: Add segment to DB@{ip} on port {port} failed: \n{e}")
+            if attempt < MAX_RETRIES:
+                print("Retrying...")
+                continue
+            else:
+                print("Max retries {} reached.".format(MAX_RETRIES))
+                return True
 
 if __name__ == "__main__":
     """
