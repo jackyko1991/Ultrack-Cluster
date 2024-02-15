@@ -5,14 +5,14 @@ LABEL_PATH_PATTERN=$DATA_DIR/*.tif
 TIME_STEPS=$(ls $DATA_DIR -1 | wc -l)
 
 # uncomment below to manual overide the number of time steps to process, default taking all time slices
-export BEGIN_TIME=0 # begin from 0
-export END_TIME=2159  # end at (max time steps - 1)
+export BEGIN_TIME=2160 # begin from 0
+export END_TIME=4319  # end at (max time steps - 1)
 TIME_STEPS=$((END_TIME-BEGIN_TIME+1))
 
 export BINNING=1
 export JOB_NAME="20231017_roi-0_$((BEGIN_TIME))-$((END_TIME))_binT-$((BINNING))_tcell"
 MAX_JOBS=100 # DB concurrency limit
-export CFG_FILE="config_binning.toml"
+export CFG_FILE="config_binning_2.toml"
 export ULTRACK_DB_PW="ultrack_pw"
 # export ULTRACK_DEBUG=1
 SKIP_SEG=false
@@ -24,27 +24,24 @@ DELAY_AFTER_DB_SERVER=1 # ultrack start time delay after database server creatio
 
 ################# ULTRACK VARIABLE AUTO SETTING ################# 
 # Helper function to calculate the ceiling of a number
-# ceil() {
-#     if [[ $1 =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-#         integerPart=${1%.*}
-#         fractionalPart=${1#*.}
-        
-#         if [[ -z $fractionalPart ]]; then
-#             echo $integerPart
-#         else
-#             if [[ $integerPart -ge 0 ]]; then
-#                 echo "$((integerPart + 1))"
-#             else
-#                 echo "$integerPart"
-#             fi
-#         fi
-#     else
-#         echo "Error: Not a valid number"
-#         return 1
-#     fi
-# }
 ceil() {
-    awk -v num="$1" 'BEGIN { printf "%.0f\n", (num + 0.9999999999999999) }'
+    if [[ $1 =~ ^[0-9]*(\.[0-9]+)?$ ]]; then
+        integerPart=${1%.*}
+        fractionalPart=${1#*.}
+        
+        if [[ -z $fractionalPart ]]; then
+            echo $integerPart
+        else
+            if [[ $integerPart -ge 0 ]]; then
+                echo "$((integerPart + 1))"
+            else
+                echo "$integerPart"
+            fi
+        fi
+    else
+        echo "Error: Not a valid number"
+        return 1
+    fi
 }
 
 TIME_STEPS_BINNED=$((TIME_STEPS/BINNING))

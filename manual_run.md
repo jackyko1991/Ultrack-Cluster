@@ -98,3 +98,13 @@
     export JOB_NAME="<JOB_NAME>"
     pg_dump -f data.sql -d ultrack -h <NODE> -p <PORT> -U $USER
     ```
+
+## Useful Commands
+- Check progress
+    ```bash
+    squeue --me
+    ```
+- Log job results
+    ```bash
+    sacct -j <JobID> --format=JobID,JobName,MaxVMSize,MaxVMSizeNode,Elapsed,State,ExitCode > ../slurm_log.log
+    ```

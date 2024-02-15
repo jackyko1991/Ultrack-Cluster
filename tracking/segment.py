@@ -135,7 +135,7 @@ def main(args):
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             # Create a TCP socket
-            print(f"Attempting add segment to DB@{ip} on port {port} ({attempt}/{MAX_RETRIES})")
+            print(f"Attempting connect to DB@{ip} on port {port} ({attempt}/{MAX_RETRIES})")
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # Set a timeout for the connection attempt
             s.settimeout(5)
@@ -145,6 +145,7 @@ def main(args):
             print(f"Connected to DB@{ip} on port {port}")
             # Close the socket after use
             s.close()
+            print("Adding segmentation to DB...")
             segment(
                 detection,
                 edges,
@@ -154,7 +155,7 @@ def main(args):
             )
             print("Adding segmentation to DB success")
             break
-        except socket.error as e:
+        except Exception as e:
             # If connection fails, print an error message
             print(f"Attempt {attempt}/{MAX_RETRIES}: Add segment to DB@{ip} on port {port} failed: \n{e}")
             if attempt < MAX_RETRIES:
@@ -162,7 +163,7 @@ def main(args):
                 continue
             else:
                 print("Max retries {} reached.".format(MAX_RETRIES))
-                return True
+                exit(1)
 
 if __name__ == "__main__":
     """
