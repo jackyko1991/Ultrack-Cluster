@@ -5,9 +5,10 @@
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --mem=20G
+#SBATCH --mem=15G
 #SBATCH --cpus-per-task=1
 #SBATCH --output=./slurm_output/segment/segment-%A_%a.out
+#SBATCH --requeue
 
 env | grep "^SLURM" | sort
 

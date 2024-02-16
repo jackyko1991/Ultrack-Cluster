@@ -5,14 +5,15 @@ LABEL_PATH_PATTERN=$DATA_DIR/*.tif
 TIME_STEPS=$(ls $DATA_DIR -1 | wc -l)
 
 # uncomment below to manual overide the number of time steps to process, default taking all time slices
-export BEGIN_TIME=2160 # begin from 0
-export END_TIME=4319  # end at (max time steps - 1)
+BATCH=3
+export BEGIN_TIME=$((2160*(BATCH-1))) # begin from 0
+export END_TIME=$((2160*BATCH-1))  # end at (max time steps - 1)
 TIME_STEPS=$((END_TIME-BEGIN_TIME+1))
 
 export BINNING=1
 export JOB_NAME="20231017_roi-0_$((BEGIN_TIME))-$((END_TIME))_binT-$((BINNING))_tcell"
-MAX_JOBS=100 # DB concurrency limit
-export CFG_FILE="config_binning_2.toml"
+MAX_JOBS=20 # DB concurrency limit
+export CFG_FILE="config_binning_$BATCH.toml"
 export ULTRACK_DB_PW="ultrack_pw"
 # export ULTRACK_DEBUG=1
 SKIP_SEG=false
@@ -20,7 +21,7 @@ SKIP_SEG=false
 ################# BMRC CONFIGURATIONS ################# 
 LONG_PARTITION=short
 SHORT_PARTITION=short # short/long on BMRC
-DELAY_AFTER_DB_SERVER=1 # ultrack start time delay after database server creation, in minutes
+DELAY_AFTER_DB_SERVER=10 # ultrack start time delay after database server creation, in minutes
 
 ################# ULTRACK VARIABLE AUTO SETTING ################# 
 # Helper function to calculate the ceiling of a number

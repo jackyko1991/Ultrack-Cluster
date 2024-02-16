@@ -5,7 +5,7 @@
 #SBATCH --partition=long
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --mem=100G
+#SBATCH --mem=300G
 #SBATCH --cpus-per-task=20
 #SBATCH --dependency=singleton
 #SBATCH --output=./slurm_output/database-%j.out
@@ -20,12 +20,14 @@ DB_DIR="/users/$GROUP_NAME/$USER/work/postgresql_ultrack_$JOB_NAME"
 DB_NAME="ultrack"
 # DB_SOCKET_DIR="/tmp"
 DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp_$JOB_NAME"
-if [ ! -d "$DB_SOCKET_DIR" ]; then
-    mkdir -p "$DB_SOCKET_DIR"
-    echo "DB socket directory created: $DB_SOCKET_DIR"
-else
+if [ -d "$DB_SOCKET_DIR" ]; then
     echo "DB socket directory already exists: $DB_SOCKET_DIR"
+    rm -r $DB_SOCKET_DIR
+    echo "Previous DB socket directory removed"
 fi
+
+mkdir -p "$DB_SOCKET_DIR"
+echo "DB socket directory created: $DB_SOCKET_DIR"
 
 # fixing error "FATAL:  unsupported frontend protocol 1234.5679: server supports 2.0 to 3.0"
 # reference: https://stackoverflow.com/questions/59190010/psycopg2-operationalerror-fatal-unsupported-frontend-protocol-1234-5679-serve

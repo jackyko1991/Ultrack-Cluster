@@ -9,7 +9,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --output=./slurm_output/export-%j.out
 
-directory="$PWD/results/$JOBNAME"
+directory="$PWD/results/$JOB_NAME"
 
 if [ ! -d "$directory" ]; then
     mkdir -p "$directory"

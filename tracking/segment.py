@@ -12,6 +12,7 @@ from rich.pretty import pprint
 import argparse
 import numpy as np
 import socket
+import time
 
 def get_args():
     parser = argparse.ArgumentParser(description="CLI worker for ultrack segment task")
@@ -159,6 +160,9 @@ def main(args):
             # If connection fails, print an error message
             print(f"Attempt {attempt}/{MAX_RETRIES}: Add segment to DB@{ip} on port {port} failed: \n{e}")
             if attempt < MAX_RETRIES:
+                WAIT_TIME=120 # in second
+                print(f"DB may be busy, wait for {WAIT_TIME}s before retry")
+                time.sleep(WAIT_TIME)
                 print("Retrying...")
                 continue
             else:
