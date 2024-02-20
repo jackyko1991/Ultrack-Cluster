@@ -1,17 +1,24 @@
 #! /bin/bash
 ################# FILE CONFIGURATIONS ################# 
-DATA_DIR="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_17_Nyeso1HCT116_1G4CD8_icam_FR10s_0p1mlperh/roi/register_denoise_gamma_channel_merged_masks/tcell"
+DATA_DIR="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_03_Nyeso1_HCT116_framerate_10sec_flowrate_0p15mlperh/register_denoising_gamma_channel_merged_cropped/cancer_batch5"
 LABEL_PATH_PATTERN=$DATA_DIR/*.tif
-TIME_STEPS=$(ls $DATA_DIR -1 | wc -l)
+TIME_LENGTH=$(ls $DATA_DIR -1 | wc -l)
 
 # uncomment below to manual overide the number of time steps to process, default taking all time slices
-BATCH=3
-export BEGIN_TIME=$((2160*(BATCH-1))) # begin from 0
-export END_TIME=$((2160*BATCH-1))  # end at (max time steps - 1)
+BATCH=1 # begin from 1
+BATCH_SIZE=2880
+POST_PADDING=20
+export BEGIN_TIME=$((BATCH_SIZE*(BATCH-1))) # begin from 0
+END_TIME=$((BATCH_SIZE*BATCH-1+POST_PADDING))  # end at (max time steps - 1)
+if [[ $END_TIME -ge $TIME_LENGTH ]]; then
+    END_TIME=$((TIME_LENGTH-1))
+fi
+export $END_TIME 
+
 TIME_STEPS=$((END_TIME-BEGIN_TIME+1))
 
-export BINNING=1
-export JOB_NAME="20231017_roi-0_$((BEGIN_TIME))-$((END_TIME))_binT-$((BINNING))_tcell"
+export BINNING=2
+export JOB_NAME="20231003_roi-5_$((BEGIN_TIME))-$((END_TIME))_binT-$((BINNING))_tcell"
 MAX_JOBS=20 # DB concurrency limit
 export CFG_FILE="config_binning_$BATCH.toml"
 export ULTRACK_DB_PW="ultrack_pw"
