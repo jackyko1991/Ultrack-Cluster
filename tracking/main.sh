@@ -13,11 +13,11 @@ END_TIME=$((BATCH_SIZE*BATCH-1+POST_PADDING))  # end at (max time steps - 1)
 if [[ $END_TIME -ge $TIME_LENGTH ]]; then
     END_TIME=$((TIME_LENGTH-1))
 fi
-export $END_TIME 
+export END_TIME
 
 TIME_STEPS=$((END_TIME-BEGIN_TIME+1))
 
-export BINNING=2
+export BINNING=1
 export JOB_NAME="20231003_roi-5_$((BEGIN_TIME))-$((END_TIME))_binT-$((BINNING))_tcell"
 MAX_JOBS=20 # DB concurrency limit
 export CFG_FILE="config_binning_$BATCH.toml"
