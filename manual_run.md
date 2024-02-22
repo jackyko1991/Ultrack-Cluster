@@ -106,7 +106,7 @@
     ```
 - Log job results
     ```bash
-    sacct -j <job_id> --format=JobID,JobName,MaxVMSize,MaxVMSizeNode,Start,End,Elapsed,State,ExitCode > ../slurm_log.log
+    sacct -j <job_id> --format=JobID%20,JobName,MaxVMSize,MaxVMSizeNode,Start,End,Elapsed,State,ExitCode > ../slurm_log.log
     ```
 - Update a job to without any dependency 
     ```bash

@@ -1,7 +1,7 @@
 #! /bin/bash
 
 #SBATCH --job-name=LINK
-#SBATCH --time=00:15:00
+#SBATCH --time=1-06:00:00
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1

@@ -1,7 +1,7 @@
 #!/usr/bin/sh
 
 #SBATCH --job-name=DATABASE
-#SBATCH --time=1-00:00:00
+#SBATCH --time=10-00:00:00
 #SBATCH --partition=long
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
@@ -22,7 +22,7 @@ DB_NAME="ultrack"
 DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp_$JOB_NAME"
 if [ -d "$DB_SOCKET_DIR" ]; then
     echo "DB socket directory already exists: $DB_SOCKET_DIR"
-    rm -r $DB_SOCKET_DIR
+    rm -rf $DB_SOCKET_DIR
     echo "Previous DB socket directory removed"
 fi
 
@@ -40,7 +40,7 @@ dasel put -t string -f $CFG_FILE -v $DB_ADDR "data.address"
 # dasel put string -f $CFG_FILE "data.address" $DB_ADDR
 echo "$(date +'%Y-%m-%d %H:%M:%S') Updated $CFG_FILE"
 
-rm -r $DB_DIR
+rm -rf $DB_DIR
 mkdir -p $DB_DIR
 initdb $DB_DIR
 

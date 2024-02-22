@@ -1,7 +1,7 @@
 #! /bin/bash
 
 #SBATCH --job-name=SOLVE
-#SBATCH --time=12:00:00
+#SBATCH --time=1-06:00:00
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1

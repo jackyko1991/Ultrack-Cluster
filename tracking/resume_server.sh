@@ -1,7 +1,7 @@
 #!/usr/bin/sh
 
 #SBATCH --job-name=DATABASE
-#SBATCH --time=1-00:00:00
+#SBATCH --time=1-06:00:00
 #SBATCH --partition=long
 #SBATCH --ntasks=1
 #SBATCH --nodes=1

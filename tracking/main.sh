@@ -5,7 +5,7 @@ LABEL_PATH_PATTERN=$DATA_DIR/*.tif
 TIME_LENGTH=$(ls $DATA_DIR -1 | wc -l)
 
 # uncomment below to manual overide the number of time steps to process, default taking all time slices
-BATCH=1 # begin from 1
+BATCH=3 # begin from 1
 BATCH_SIZE=2880
 POST_PADDING=20
 export BEGIN_TIME=$((BATCH_SIZE*(BATCH-1))) # begin from 0
@@ -26,9 +26,9 @@ export ULTRACK_DB_PW="ultrack_pw"
 SKIP_SEG=false
 
 ################# BMRC CONFIGURATIONS ################# 
-LONG_PARTITION=short
+LONG_PARTITION=long
 SHORT_PARTITION=short # short/long on BMRC
-DELAY_AFTER_DB_SERVER=10 # ultrack start time delay after database server creation, in minutes
+DELAY_AFTER_DB_SERVER=5 # ultrack start time delay after database server creation, in minutes
 
 ################# ULTRACK VARIABLE AUTO SETTING ################# 
 # Helper function to calculate the ceiling of a number
