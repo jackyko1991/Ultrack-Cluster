@@ -5,8 +5,8 @@
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --mem=300G
-#SBATCH --cpus-per-task=20
+#SBATCH --mem=480G
+#SBATCH --cpus-per-task=32
 #SBATCH --output=./slurm_output/solve/solve-%A_%a.out
 
 env | grep "^SLURM" | sort

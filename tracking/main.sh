@@ -23,12 +23,22 @@ MAX_JOBS=20 # DB concurrency limit
 export CFG_FILE="config_binning_$BATCH.toml"
 export ULTRACK_DB_PW="ultrack_pw"
 # export ULTRACK_DEBUG=1
-SKIP_SEG=false
+SKIP_SEG=true
+echo "Skip segmentation"
+
+SKIP_LINK=true
+# force skip segmentation if choose to skip link
+if $SKIP_LINK; then
+    echo "Skip linking"
+    SKIP_SEG=true
+fi
+# TODO: skip solve for direct export
+# SKIP_SOLVE=false
 
 ################# BMRC CONFIGURATIONS ################# 
 LONG_PARTITION=long
 SHORT_PARTITION=short # short/long on BMRC
-DELAY_AFTER_DB_SERVER=5 # ultrack start time delay after database server creation, in minutes
+DELAY_AFTER_DB_SERVER=3 # ultrack start time delay after database server creation, in minutes
 
 ################# ULTRACK VARIABLE AUTO SETTING ################# 
 # Helper function to calculate the ceiling of a number
@@ -71,14 +81,18 @@ rm ./slurm_output/$JOB_NAME/*.out -f
 if ! $SKIP_SEG; then
     rm ./slurm_output/$JOB_NAME/segment/*.out -f
 fi
-rm ./slurm_output/$JOB_NAME/link/*.out -f
+if ! $SKIP_LINK; then
+    rm ./slurm_output/$JOB_NAME/link/*.out -f
+fi
 rm ./slurm_output/$JOB_NAME/solve/*.out -f
 
 mkdir -p slurm_output/$JOB_NAME
 if ! $SKIP_SEG; then
     mkdir -p slurm_output/$JOB_NAME/segment
 fi
-mkdir -p slurm_output/$JOB_NAME/link
+if ! $SKIP_LINK; then
+    mkdir -p slurm_output/$JOB_NAME/link
+fi
 mkdir -p slurm_output/$JOB_NAME/solve
 
 if $SKIP_SEG; then
@@ -115,15 +129,27 @@ fi
 
 # link single channel
 if $SKIP_SEG; then
-    LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d after:$FLOW_JOB_ID+$DELAY_AFTER_DB_SERVER link.sh)
+    if $SKIP_LINK; then
+        LINK_JOB_ID=$FLOW_JOB_ID
+    else
+        LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d after:$FLOW_JOB_ID+$DELAY_AFTER_DB_SERVER link.sh)
+    fi
 else
     LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d afterok:$FLOW_JOB_ID link.sh)
 fi
 
 if [[ $NUM_WINDOWS -eq 1 ]]; then
-    SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d afterok:$LINK_JOB_ID solve.sh)
+    if $SKIP_LINK; then
+        SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d after:$LINK_JOB_ID+$DELAY_AFTER_DB_SERVER solve.sh)
+    else
+        SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d afterok:$LINK_JOB_ID solve.sh)
+    fi
 else
-    SOLVE_JOB_ID_0=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-$NUM_WINDOWS:2 -d afterok:$LINK_JOB_ID solve.sh)
+    if $SKIP_LINK; then
+        SOLVE_JOB_ID_0=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-$NUM_WINDOWS:2 -d after:$LINK_JOB_ID+$DELAY_AFTER_DB_SERVER solve.sh)
+    else
+        SOLVE_JOB_ID_0=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-$NUM_WINDOWS:2 -d afterok:$LINK_JOB_ID solve.sh)
+    fi
     SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=1-$NUM_WINDOWS:2 -d afterok:$SOLVE_JOB_ID_0 solve.sh)
 fi
 
