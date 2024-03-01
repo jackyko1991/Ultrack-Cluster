@@ -153,6 +153,7 @@ def main(args):
                 cfg,
                 batch_index=args.batch_index,
                 overwrite=True,
+		insertion_throttle_rate=50
             )
             print("Adding segmentation to DB success")
             break

@@ -69,9 +69,34 @@ psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_connections TO '500';" $DB_NAME
 # turn on logging
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET logging_collector TO 'on';" $DB_NAME
 
-# increases WAL size to improve performance
-# https://www.postgresql.org/docs/current/wal-configuration.html
-psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_wal_size TO '10GB';" $DB_NAME
+# configuration tuned using https://pgtune.leopard.in.ua/
+# and SLURM job parameters
+# -- WARNING
+# -- this tool not being optimal
+# -- for very high memory systems
+# -- DB Version: 10
+# -- OS Type: linux
+# -- DB Type: dw
+# -- Total Memory (RAM): 128 GB
+# -- CPUs num: 16
+# -- Connections num: 500
+# -- Data Storage: hdd
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_connections = '500';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET shared_buffers = '32GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET effective_cache_size = '96GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET maintenance_work_mem = '2GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET checkpoint_completion_target = '0.9';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET wal_buffers = '16MB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET default_statistics_target = '500';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET random_page_cost = '4';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET effective_io_concurrency = '2';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET work_mem = '4194kB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET huge_pages = 'try';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET min_wal_size = '4GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_wal_size = '16GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_worker_processes = '20';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_parallel_workers_per_gather = '8';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_parallel_workers = '20';"
 
 # restart database
 echo "$(date +'%Y-%m-%d %H:%M:%S') Restarting DB..."
