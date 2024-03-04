@@ -37,11 +37,11 @@ echo "Updated $CFG_FILE"
 # -- WARNING
 # -- this tool not being optimal
 # -- for very high memory systems
-# -- DB Version: 10
+# -- DB Version: 15
 # -- OS Type: linux
 # -- DB Type: dw
-# -- Total Memory (RAM): 128 GB
-# -- CPUs num: 16
+# -- Total Memory (RAM): 300 GB
+# -- CPUs num: 20
 # -- Connections num: 500
 # -- Data Storage: hdd
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_connections = '500';"
@@ -53,12 +53,13 @@ psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET wal_buffers = '16MB';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET default_statistics_target = '500';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET random_page_cost = '4';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET effective_io_concurrency = '2';"
-psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET work_mem = '4194kB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET work_mem = '7864kB';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET huge_pages = 'try';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET min_wal_size = '4GB';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_wal_size = '16GB';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_worker_processes = '20';"
-psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_parallel_workers_per_gather = '8';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_parallel_workers_per_gather = '10';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_parallel_workers = '20';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_parallel_maintenance_workers = '4';"
 
 postgres -i -D $DB_DIR
