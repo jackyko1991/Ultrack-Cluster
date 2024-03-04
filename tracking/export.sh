@@ -5,8 +5,8 @@
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --mem=100G
-#SBATCH --cpus-per-task=16
+#SBATCH --mem=15G
+#SBATCH --cpus-per-task=1
 #SBATCH --output=./slurm_output/export-%j.out
 
 directory="$PWD/results/$JOB_NAME"

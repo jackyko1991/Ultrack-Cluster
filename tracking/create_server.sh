@@ -82,8 +82,8 @@ psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET logging_collector TO 'on';" $DB_NAME
 # -- Connections num: 500
 # -- Data Storage: hdd
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_connections = '500';"
-psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET shared_buffers = '32GB';"
-psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET effective_cache_size = '96GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET shared_buffers = '75GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET effective_cache_size = '225GB';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET maintenance_work_mem = '2GB';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET checkpoint_completion_target = '0.9';"
 psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET wal_buffers = '16MB';"

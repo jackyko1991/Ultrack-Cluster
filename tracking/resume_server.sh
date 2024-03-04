@@ -1,7 +1,7 @@
 #!/usr/bin/sh
 
 #SBATCH --job-name=DATABASE
-#SBATCH --time=1-06:00:00
+#SBATCH --time=10-00:00:00
 #SBATCH --partition=long
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
@@ -31,5 +31,34 @@ echo "Server running on uri $DB_ADDR"
 dasel put -t string -f $CFG_FILE -v $DB_ADDR "data.address" 
 # dasel put string -f $CFG_FILE "data.address" $DB_ADDR
 echo "Updated $CFG_FILE"
+
+# configuration tuned using https://pgtune.leopard.in.ua/
+# and SLURM job parameters
+# -- WARNING
+# -- this tool not being optimal
+# -- for very high memory systems
+# -- DB Version: 10
+# -- OS Type: linux
+# -- DB Type: dw
+# -- Total Memory (RAM): 128 GB
+# -- CPUs num: 16
+# -- Connections num: 500
+# -- Data Storage: hdd
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_connections = '500';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET shared_buffers = '75GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET effective_cache_size = '225GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET maintenance_work_mem = '2GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET checkpoint_completion_target = '0.9';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET wal_buffers = '16MB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET default_statistics_target = '500';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET random_page_cost = '4';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET effective_io_concurrency = '2';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET work_mem = '4194kB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET huge_pages = 'try';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET min_wal_size = '4GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_wal_size = '16GB';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_worker_processes = '20';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_parallel_workers_per_gather = '8';"
+psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_parallel_workers = '20';"
 
 postgres -i -D $DB_DIR
