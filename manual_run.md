@@ -107,6 +107,12 @@
 - Log job results
     ```bash
     sacct -j <job_id> --format=JobID%20,JobName,MaxVMSize,MaxVMSizeNode,Start,End,Elapsed,State,ExitCode > ../slurm_log.log
+
+    # job memory usage
+    sacct -j <job_id> -o ReqMem,MaxRSS
+
+    # job cpu usage
+    sacct -j <job_id> -o ReqCPUS,ElapsedRaw,TRESUsageInMax%80 | tr ',=:' ' ' | awk 'NR>2 {print $1,(($4*3600)+($5*60)+$6)/$2}'
     ```
 - Update a job to without any dependency 
     ```bash
