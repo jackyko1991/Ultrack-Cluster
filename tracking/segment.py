@@ -93,7 +93,7 @@ def main(args):
     if args.end != -1:
         label = dask_image.imread.imread(LABEL_PATH_PATTERN)[args.begin:args.end+1:args.scale]
     else:
-        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[args.begin,-1,args.scale]
+        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[args.begin::args.scale]
 
     # same function used in `segment` call below
     time_points = list(batch_index_range(
@@ -130,45 +130,57 @@ def main(args):
         edges[time_points[0]:time_points[-1]+1] = gaussian_filter(edges[time_points[0]:time_points[-1]+1], sigma=[sigma_t,sigma_xy,sigma_xy])
 
     # add segment to database
-    ip = cfg.data_config.address.split("@")[1].split(":")[0]
-    port = 5432
+    if cfg.data_config.database == "postgresql":
+        ip = cfg.data_config.address.split("@")[1].split(":")[0]
+        port = 5432
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            # Create a TCP socket
-            print(f"Attempting connect to DB@{ip} on port {port} ({attempt}/{MAX_RETRIES})")
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            # Set a timeout for the connection attempt
-            s.settimeout(5)
-            # Attempt to connect to the IP and port
-            s.connect((ip, port))
-            # If connection is successful, print a success message
-            print(f"Connected to DB@{ip} on port {port}")
-            # Close the socket after use
-            s.close()
-            print("Adding segmentation to DB...")
-            segment(
-                detection,
-                edges,
-                cfg,
-                batch_index=args.batch_index,
-                overwrite=True,
-		insertion_throttle_rate=50
-            )
-            print("Adding segmentation to DB success")
-            break
-        except Exception as e:
-            # If connection fails, print an error message
-            print(f"Attempt {attempt}/{MAX_RETRIES}: Add segment to DB@{ip} on port {port} failed: \n{e}")
-            if attempt < MAX_RETRIES:
-                WAIT_TIME=120 # in second
-                print(f"DB may be busy, wait for {WAIT_TIME}s before retry")
-                time.sleep(WAIT_TIME)
-                print("Retrying...")
-                continue
-            else:
-                print("Max retries {} reached.".format(MAX_RETRIES))
-                exit(1)
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                # Create a TCP socket
+                print(f"Attempting connect to DB@{ip} on port {port} ({attempt}/{MAX_RETRIES})")
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                # Set a timeout for the connection attempt
+                s.settimeout(5)
+                # Attempt to connect to the IP and port
+                s.connect((ip, port))
+                # If connection is successful, print a success message
+                print(f"Connected to DB@{ip} on port {port}")
+                # Close the socket after use
+                s.close()
+                print("Adding segmentation to PostgreSQL DB...")
+                segment(
+                    detection,
+                    edges,
+                    cfg,
+                    batch_index=args.batch_index,
+                    overwrite=True,
+                    insertion_throttle_rate=50
+                )
+                print("Adding segmentation to PostgreSQL DB success")
+                break
+            except Exception as e:
+                # If connection fails, print an error message
+                print(f"Attempt {attempt}/{MAX_RETRIES}: Add segment to DB@{ip} on port {port} failed: \n{e}")
+                if attempt < MAX_RETRIES:
+                    WAIT_TIME=120 # in second
+                    print(f"DB may be busy, wait for {WAIT_TIME}s before retry")
+                    time.sleep(WAIT_TIME)
+                    print("Retrying...")
+                    continue
+                else:
+                    print("Max retries {} reached.".format(MAX_RETRIES))
+                    exit(1)
+    else:
+        print("Adding segmentation to Sqlite DB...")
+        segment(
+            detection,
+            edges,
+            cfg,
+            batch_index=args.batch_index,
+            overwrite=True,
+            insertion_throttle_rate=50
+        )
+        print("Adding segmentation to Sqlite DB success")
 
 if __name__ == "__main__":
     """

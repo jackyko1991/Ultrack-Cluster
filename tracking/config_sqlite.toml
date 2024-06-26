@@ -1,0 +1,35 @@
+[data]
+database = 'sqlite'
+n_workers = 8
+working_dir = './database'
+
+[segmentation]
+anisotropy_penalization = 0.0
+min_area = 30
+max_area = 200
+max_noise = 0.4
+min_frontier = 0.0
+n_workers = 8
+threshold = 0.5
+ws_hierarchy = 'area'
+
+[linking]
+distance_weight = 0.0
+max_distance = 15.0
+max_neighbors = 5
+n_workers = 8
+z_score_threshold = 5.0
+
+[tracking]
+appear_weight = -1
+bias = 0
+disappear_weight = -1
+division_weight = -1
+link_function = 'power'
+method = 0
+n_threads = 0
+overlap_size = 5
+power = 4
+solution_gap = 0.01
+time_limit = 120000
+window_size = 20
