@@ -16,10 +16,20 @@ module load PostgreSQL/15.2-GCCcore-12.2.0
 
 # DB_DIR="/hpc/mydata/$USER/postgresql_ultrack"
 GROUP_NAME=$(getent group $GROUPS | cut -d: -f1)
-DB_DIR="/users/$GROUP_NAME/$USER/work/postgresql_ultrack_$JOB_NAME"
+if [ -z "$JOB_NAME"]; then
+    DB_DIR="/users/$GROUP_NAME/$USER/work/postgresql_ultrack_$SLURM_JOB_ID"
+else
+    DB_DIR="/users/$GROUP_NAME/$USER/work/postgresql_ultrack_$JOB_NAME"
+fi
+
 DB_NAME="ultrack"
 # DB_SOCKET_DIR="/tmp"
-DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp_$JOB_NAME"
+if [ -z "$JOB_NAME"]; then
+    DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp_$SLURM_JOB_ID"
+else
+    DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp_$JOB_NAME"
+fi
+
 if [ -d "$DB_SOCKET_DIR" ]; then
     echo "DB socket directory already exists: $DB_SOCKET_DIR"
     rm -rf $DB_SOCKET_DIR
