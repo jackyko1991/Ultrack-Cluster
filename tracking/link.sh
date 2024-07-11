@@ -14,4 +14,4 @@ env | grep "^SLURM" | sort
 # module load anaconda/2022.05
 # conda activate dexpv2
 
-ultrack link -cfg $CFG_FILE -b $SLURM_ARRAY_TASK_ID $@
+ultrack link -cfg "$1" -b $SLURM_ARRAY_TASK_ID $@

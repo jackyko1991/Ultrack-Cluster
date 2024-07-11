@@ -14,6 +14,8 @@ env | grep "^SLURM" | sort
 
 module load PostgreSQL/15.2-GCCcore-12.2.0
 
+CFG_FILE=$1
+
 # DB_DIR="/hpc/mydata/$USER/postgresql_ultrack"
 GROUP_NAME=$(getent group $GROUPS | cut -d: -f1)
 if [ -z "$JOB_NAME"]; then

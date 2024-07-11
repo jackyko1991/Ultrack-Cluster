@@ -15,4 +15,4 @@ module load Gurobi/10.0.1-GCCcore-12.2.0
 # module load anaconda/2022.05
 # conda activate dexpv2
 
-ultrack solve -cfg $CFG_FILE -b $SLURM_ARRAY_TASK_ID
+ultrack solve -cfg "$1" -b $SLURM_ARRAY_TASK_ID
