@@ -18,7 +18,7 @@ CFG_FILE=$1
 
 # DB_DIR="/hpc/mydata/$USER/postgresql_ultrack"
 GROUP_NAME=$(getent group $GROUPS | cut -d: -f1)
-if [ -z "$JOB_NAME"]; then
+if [ -z "$JOB_NAME" ]; then
     DB_DIR="/users/$GROUP_NAME/$USER/work/postgresql_ultrack_$SLURM_JOB_ID"
 else
     DB_DIR="/users/$GROUP_NAME/$USER/work/postgresql_ultrack_$JOB_NAME"
@@ -26,7 +26,7 @@ fi
 
 DB_NAME="ultrack"
 # DB_SOCKET_DIR="/tmp"
-if [ -z "$JOB_NAME"]; then
+if [ -z "$JOB_NAME" ]; then
     DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp_$SLURM_JOB_ID"
 else
     DB_SOCKET_DIR="/users/$GROUP_NAME/$USER/work/tmp_$JOB_NAME"

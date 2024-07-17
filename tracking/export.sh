@@ -12,17 +12,19 @@
 source ~/.bashrc
 mamba activate cyto
 
-if [[ -v "$2" ]]; then
-    directory=$2
-else
+echo "Config file: $1"
+# check if the output dir is provided
+if [[ -z "$2" ]]; then
     directory="$PWD/results/$JOB_NAME"
+else
+    directory="$2"
 fi
 
 if [ ! -d "$directory" ]; then
     mkdir -p "$directory"
-    echo "Directory created: $directory"
+    echo "Output directory created: $directory"
 else
-    echo "Directory already exists: $directory"
+    echo "Output directory already exists: $directory"
 fi
 
 ultrack export zarr-napari -cfg "$1" -o "$directory" -ow
