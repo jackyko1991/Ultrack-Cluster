@@ -43,7 +43,34 @@ echo "DB socket directory created: $DB_SOCKET_DIR"
 
 # fixing error "FATAL:  unsupported frontend protocol 1234.5679: server supports 2.0 to 3.0"
 # reference: https://stackoverflow.com/questions/59190010/psycopg2-operationalerror-fatal-unsupported-frontend-protocol-1234-5679-serve
-DB_ADDR="$USER:$ULTRACK_DB_PW@$SLURM_JOB_NODELIST:5432/ultrack?gssencmode=disable"
+
+# default postgresql port
+DESIRED_PORT=5432
+
+# Function to check if a port is in use
+is_port_in_use() {
+  lsof -i -P -n | grep LISTEN | grep ":$1" > /dev/null
+  return $?
+}
+
+# Check if the desired port is in use
+if is_port_in_use $DESIRED_PORT; then
+    echo "Port $DESIRED_PORT is in use."
+    # Find the next available port starting from DESIRED_PORT + 1
+    AVAILABLE_PORT=$((DESIRED_PORT + 1))
+    while is_port_in_use $AVAILABLE_PORT; do
+        AVAILABLE_PORT=$((AVAILABLE_PORT + 1))
+    done
+    echo "Assigning available port: $AVAILABLE_PORT"
+else
+    AVAILABLE_PORT=$DESIRED_PORT
+    echo "Port $DESIRED_PORT is available."
+fi
+
+# Use AVAILABLE_PORT for your PostgreSQL configuration
+echo "Using port $AVAILABLE_PORT for PostgreSQL."
+
+DB_ADDR="$USER:$ULTRACK_DB_PW@$SLURM_JOB_NODELIST:$AVAILABLE_PORT/ultrack?gssencmode=disable"
 
 # update config file
 echo ""
@@ -63,7 +90,7 @@ EOF
 
 # creating database
 echo "$(date +'%Y-%m-%d %H:%M:%S') Initializing DB..."
-pg_ctl start -D $DB_DIR
+pg_ctl start -D $DB_DIR -o "-p $AVAILABLE_PORT"
 
 # allowing $USER network access
 cat << EOF >> $DB_DIR/pg_hba.conf
@@ -115,7 +142,7 @@ psql -h $DB_SOCKET_DIR -c "ALTER SYSTEM SET max_parallel_maintenance_workers = '
 echo "$(date +'%Y-%m-%d %H:%M:%S') Restarting DB..."
 pg_ctl stop -D $DB_DIR
 echo "$(date +'%Y-%m-%d %H:%M:%S') Ultrack DB service ready"
-postgres -i -D $DB_DIR
+postgres -i -D $DB_DIR -p $AVAILABLE_PORT
 
 # STOP:
 # pg_ctl stop -D $DB_DIR
