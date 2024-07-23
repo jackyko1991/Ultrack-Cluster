@@ -27,4 +27,6 @@ else
     echo "Output directory already exists: $directory"
 fi
 
+echo "Exporting Ultrack results...."
 ultrack export zarr-napari -cfg "$1" -o "$directory" -ow
+echo "Exporting Ultrack results complete"
