@@ -8,19 +8,18 @@ TIME_LENGTH=$(ls $DATA_DIR -1 | wc -l)
 BATCH=3 # begin from 1
 BATCH_SIZE=2880
 POST_PADDING=20
-export BEGIN_TIME=$((BATCH_SIZE*(BATCH-1))) # begin from 0
+BEGIN_TIME=$((BATCH_SIZE*(BATCH-1))) # begin from 0
 END_TIME=$((BATCH_SIZE*BATCH-1+POST_PADDING))  # end at (max time steps - 1)
 if [[ $END_TIME -ge $TIME_LENGTH ]]; then
     END_TIME=$((TIME_LENGTH-1))
 fi
-export END_TIME
 
 TIME_STEPS=$((END_TIME-BEGIN_TIME+1))
 
 export BINNING=1
 export JOB_NAME="20231003_roi-5_$((BEGIN_TIME))-$((END_TIME))_binT-$((BINNING))_tcell"
 MAX_JOBS=20 # DB concurrency limit
-export CFG_FILE="config_binning_$BATCH.toml"
+CFG_FILE="config_binning_$BATCH.toml"
 export ULTRACK_DB_PW="ultrack_pw"
 # export ULTRACK_DEBUG=1
 SKIP_SEG=true
@@ -96,9 +95,9 @@ fi
 mkdir -p slurm_output/$JOB_NAME/solve
 
 if $SKIP_SEG; then
-    SERVER_JOB_ID=$(sbatch --partition $LONG_PARTITION --job-name "DATABASE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/database-%j.out" --parsable resume_server.sh)
+    SERVER_JOB_ID=$(sbatch --partition $LONG_PARTITION --job-name "DATABASE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/database-%j.out" --parsable resume_server.sh "$CFG_FILE")
 else
-    SERVER_JOB_ID=$(sbatch --partition $LONG_PARTITION --job-name "DATABASE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/database-%j.out" --parsable create_server.sh)
+    SERVER_JOB_ID=$(sbatch --partition $LONG_PARTITION --job-name "DATABASE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/database-%j.out" --parsable create_server.sh "$CFG_FILE")
 fi
 echo "Server creation job submited (ID: $SERVER_JOB_ID)"
 
@@ -107,7 +106,7 @@ if $SKIP_SEG; then
     SEGM_JOB_ID=$SERVER_JOB_ID
 else
     # SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh ../segmentation.zarr)
-    SEGM_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "SEGMENT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/segment/segment-%A_%a.out" --parsable --array=0-$DS_LENGTH%$MAX_JOBS -d after:$SERVER_JOB_ID+$DELAY_AFTER_DB_SERVER segment.sh "$LABEL_PATH_PATTERN")
+    SEGM_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "SEGMENT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/segment/segment-%A_%a.out" --parsable --array=0-$DS_LENGTH%$MAX_JOBS -d after:$SERVER_JOB_ID+$DELAY_AFTER_DB_SERVER segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
 fi
 
 if [[ -d "../flow.zarr" ]]; then
@@ -132,25 +131,25 @@ if $SKIP_SEG; then
     if $SKIP_LINK; then
         LINK_JOB_ID=$FLOW_JOB_ID
     else
-        LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d after:$FLOW_JOB_ID+$DELAY_AFTER_DB_SERVER link.sh)
+        LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d after:$FLOW_JOB_ID+$DELAY_AFTER_DB_SERVER link.sh "$CFG_FILE")
     fi
 else
-    LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d afterok:$FLOW_JOB_ID link.sh)
+    LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d afterok:$FLOW_JOB_ID link.sh "$CFG_FILE")
 fi
 
 if [[ $NUM_WINDOWS -eq 1 ]]; then
     if $SKIP_LINK; then
-        SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d after:$LINK_JOB_ID+$DELAY_AFTER_DB_SERVER solve.sh)
+        SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d after:$LINK_JOB_ID+$DELAY_AFTER_DB_SERVER solve.sh "$CFG_FILE")
     else
-        SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d afterok:$LINK_JOB_ID solve.sh)
+        SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d afterok:$LINK_JOB_ID solve.sh "$CFG_FILE")
     fi
 else
     if $SKIP_LINK; then
-        SOLVE_JOB_ID_0=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-$NUM_WINDOWS:2 -d after:$LINK_JOB_ID+$DELAY_AFTER_DB_SERVER solve.sh)
+        SOLVE_JOB_ID_0=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-$NUM_WINDOWS:2 -d after:$LINK_JOB_ID+$DELAY_AFTER_DB_SERVER solve.sh "$CFG_FILE")
     else
-        SOLVE_JOB_ID_0=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-$NUM_WINDOWS:2 -d afterok:$LINK_JOB_ID solve.sh)
+        SOLVE_JOB_ID_0=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-$NUM_WINDOWS:2 -d afterok:$LINK_JOB_ID solve.sh "$CFG_FILE")
     fi
-    SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=1-$NUM_WINDOWS:2 -d afterok:$SOLVE_JOB_ID_0 solve.sh)
+    SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=1-$NUM_WINDOWS:2 -d afterok:$SOLVE_JOB_ID_0 solve.sh "$CFG_FILE")
 fi
 
 # sbatch --mem 500GB --partition $PARTITION --cpus-per-task=50 --job-name EXPORT \
@@ -158,7 +157,7 @@ fi
 #     ultrack export zarr-napari -cfg $CFG_FILE -o results \
 #     --measure -r napari-ome-zarr -i ../fused.zarr
 # EXPORT_JOB_ID=$(sbatch --job-name "EXPORT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/export-%j.out" export.sh)
-EXPORT_JOB_ID=$(sbatch --job-name "EXPORT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/export-%j.out" -d afterok:$SOLVE_JOB_ID_1 export.sh)
+EXPORT_JOB_ID=$(sbatch --job-name "EXPORT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/export-%j.out" -d afterok:$SOLVE_JOB_ID_1 export.sh "$CFG_FILE")
 
 # # stop DB server after job completion
 # while true; do

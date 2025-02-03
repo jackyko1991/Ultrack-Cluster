@@ -19,6 +19,16 @@ This repository contains essential SLURM scripts that calls ultrack CLI run. The
 
 Details are modified to fit the BMRC SLURM and infrastructure setup. It provides a reference code for cluster run modification.
 
+### Gurobi License
+Ultrack solves linear programming with [Gurobi](https://www.gurobi.com/). For university clusters you may consult the administration team for the [Academic Site License](https://www.gurobi.com/features/academic-site-license/) installation.
+
+On BMRC Gruobi module need to be called before starting the code:
+```bash
+srun -p short --pty bash
+module load Gurobi/10.0.1-GCCcore-12.2.0
+<your Gurobi code>
+```
+
 ### PostgreSQL Server Setup
 Most cluster environment may not come with all necessary tools for the PostgreSQL server setup in [create_server.sh](./tracking/create_server.sh). For an automated software installation (script dedicated to BMRC folder structure but you may modify to fit your system's installation environment), edit `$INSTALL_DIR` in `install_server_dependency.sh` then run:
 ```bash

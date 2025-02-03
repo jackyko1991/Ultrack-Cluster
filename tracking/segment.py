@@ -147,7 +147,7 @@ def main(args):
     # add segment to database
     if cfg.data_config.database == "postgresql":
         ip = cfg.data_config.address.split("@")[1].split(":")[0]
-        port = 5432
+        port = int(cfg.data_config.address.split(':')[2].split('/')[0])
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
@@ -176,8 +176,10 @@ def main(args):
             except Exception as e:
                 # If connection fails, print an error message
                 print(f"Attempt {attempt}/{MAX_RETRIES}: Add segment to DB@{ip} on port {port} failed: \n{e}")
+                print(e)
                 if attempt < MAX_RETRIES:
                     WAIT_TIME=120 # in second
+                    # WAIT_TIME=5 # in second
                     print(f"DB may be busy, wait for {WAIT_TIME}s before retry")
                     time.sleep(WAIT_TIME)
                     print("Retrying...")
