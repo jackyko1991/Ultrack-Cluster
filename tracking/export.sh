@@ -12,6 +12,8 @@
 source ~/.bashrc
 mamba activate cyto
 
+env | grep "^SLURM" | sort
+
 echo "Config file: $1"
 # check if the output dir is provided
 if [[ -z "$2" ]]; then
