@@ -13,6 +13,7 @@ import argparse
 import numpy as np
 import socket
 import time
+from tqdm import tqdm
 
 def get_args():
     parser = argparse.ArgumentParser(description="CLI worker for ultrack segment task")
@@ -71,6 +72,14 @@ def get_args():
         help='Temporal Gaussian blur stack padding. Default is zero'
     )
     parser.add_argument(
+        '-bz','--batch_size',
+        metavar="INT",
+        dest="batch_size",
+        type=int,
+        default=50,
+        help="Batch size for labels to edges conversion"
+    )
+    parser.add_argument(
         '-s','--scale',
         metavar="INT",
         dest="scale",
@@ -119,11 +128,17 @@ def main(args):
         # filter out of range indices
         time_points = [x for x in time_points if 0 <= x <= label.shape[0]]
 
+    LABEL_TO_EDGE_TIME_BATCH_SZ = args.batch_size
+
     # compute edges and detection for a subset of points
-    for t in time_points:
-        t_det, t_edges = labels_to_edges(np.asarray(label[t:t+1,:,:])) # accept only list of labels, retains time dim for readability
-        detection[t:t+1,:,:] = t_det
-        edges[t:t+1,:,:] = t_edges
+    # TODO: parallelize the process
+    for t in tqdm(range(0,len(time_points),LABEL_TO_EDGE_TIME_BATCH_SZ),desc="Images to Edges"):
+        end_t = t+LABEL_TO_EDGE_TIME_BATCH_SZ
+        if end_t > len(label):
+            end_t = len(label)
+        t_det, t_edges = labels_to_edges(np.asarray(label[t:t+LABEL_TO_EDGE_TIME_BATCH_SZ,:,:])) # accept only list of labels, retains time dim for readability
+        detection[t:t+LABEL_TO_EDGE_TIME_BATCH_SZ,:,:] = t_det
+        edges[t:t+LABEL_TO_EDGE_TIME_BATCH_SZ,:,:] = t_edges
 
     # perform gaussian blur to create fuzzy edges in space and time
     if sigma_t > 0 and args.blur_padding != 0:
