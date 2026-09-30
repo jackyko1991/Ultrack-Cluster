@@ -103,8 +103,13 @@ DB_ADDR="$USER:$ULTRACK_DB_PW@$SLURM_JOB_NODELIST:$AVAILABLE_PORT/ultrack?gssenc
 # update config file
 echo ""
 echo "$(date +'%Y-%m-%d %H:%M:%S') Server running on uri $DB_ADDR"
-dasel put -t string -f $CFG_FILE -v $DB_ADDR "data.address" 
+dasel put -t string -f $CFG_FILE -v $DB_ADDR "data.address"
 # dasel put string -f $CFG_FILE "data.address" $DB_ADDR
+# $CFG_FILE now has $ULTRACK_DB_PW embedded in plaintext (ultrack's own
+# DataConfig.address format has no separate credentials field) -- this
+# doesn't remove the password from the file, but at least stops every
+# other user on the shared filesystem from reading it.
+chmod 600 "$CFG_FILE"
 echo "$(date +'%Y-%m-%d %H:%M:%S') Updated $CFG_FILE"
 
 rm -rf $DB_DIR

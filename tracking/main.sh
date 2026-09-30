@@ -137,7 +137,18 @@ else
     LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d afterok:$FLOW_JOB_ID link.sh "$CFG_FILE")
 fi
 
-if [[ $NUM_WINDOWS -eq 1 ]]; then
+if [[ $NUM_WINDOWS -eq 0 ]]; then
+    # Bug fix: this used to check "-eq 1", which is wrong. NUM_WINDOWS is
+    # the LAST window's 0-based index (ceil(DS_LENGTH/window_size) - 1),
+    # so NUM_WINDOWS==1 means TWO windows exist (indices 0 and 1) -- the
+    # general (else) branch below already handles that correctly via its
+    # own 0-$NUM_WINDOWS:2 / 1-$NUM_WINDOWS:2 array slicing. The special
+    # case actually needed is NUM_WINDOWS==0 (only ONE window, index 0,
+    # total), where the general branch's odd-window array (--array=1-0:2,
+    # start > end) would be an invalid SLURM array range. The old
+    # "-eq 1" special case instead submitted only --array=0-0 whenever
+    # NUM_WINDOWS was 1, silently never solving window 1 at all, and the
+    # export step then ran on an incomplete solve.
     if $SKIP_LINK; then
         SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d after:$LINK_JOB_ID+$DELAY_AFTER_DB_SERVER solve.sh "$CFG_FILE")
     else
