@@ -30,7 +30,7 @@ source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
 : "${4:?usage: segment.sh <label path pattern> <config.toml> <begin time> <end time>}"
 
-env | grep "^SLURM" | sort || true
+start_stage segment
 
 activate_ultrack_env || exit 1
 wait_for_db || exit 1

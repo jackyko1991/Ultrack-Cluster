@@ -32,7 +32,7 @@ source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 activate_ultrack_env || exit 1
 wait_for_db || exit 1
 
-env | grep "^SLURM" | sort || true
+start_stage export
 
 echo "Config file: $1"
 # check if the output dir is provided

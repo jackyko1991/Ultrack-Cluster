@@ -32,11 +32,10 @@ SKIP_SEG="${SKIP_SEG:-true}"
 SKIP_LINK="${SKIP_LINK:-true}"
 # force skip segmentation if choose to skip link
 if $SKIP_LINK; then
-    echo "Skip linking"
+    log INFO "skipping linking (and segmentation)"
     SKIP_SEG=true
-fi
-if $SKIP_SEG; then
-    echo "Skip segmentation"
+elif $SKIP_SEG; then
+    log INFO "skipping segmentation"
 fi
 # TODO: skip solve for direct export
 # SKIP_SOLVE=false
@@ -48,7 +47,7 @@ SHORT_PARTITION="${SHORT_PARTITION:-short}" # short/long on BMRC
 ################# ULTRACK VARIABLE AUTO SETTING #################
 TIME_STEPS_BINNED=$((TIME_STEPS/BINNING))
 if (( TIME_STEPS_BINNED < 2 )); then
-    echo "ERROR: need at least 2 time points to track, got $TIME_STEPS_BINNED from $DATA_DIR [$BEGIN_TIME:$END_TIME]" >&2
+    log ERROR "need at least 2 time points to track, got $TIME_STEPS_BINNED from $DATA_DIR [$BEGIN_TIME:$END_TIME]"
     exit 1
 fi
 export DS_LENGTH=$((TIME_STEPS_BINNED-1)) # number of time points - 1
@@ -59,118 +58,94 @@ WINDOW_SIZE=$($DASEL_BIN -f $CFG_FILE "tracking.window_size")
 # last 0-based window index: ceil(DS_LENGTH / window_size) - 1
 NUM_WINDOWS=$(last_batch_index "$DS_LENGTH" "$WINDOW_SIZE")
 
-echo "Slices used from $DATA_DIR: $TIME_STEPS [$BEGIN_TIME:$END_TIME]"
-echo "Binning temporally in $BINNING times, resulting in $TIME_STEPS_BINNED steps"
-echo "Track window size = $WINDOW_SIZE, windows count = $NUM_WINDOWS"
+export ULTRACK_STAGE=main
+LOG_DIR="$PWD/slurm_output/$JOB_NAME"
+log INFO "slices from $DATA_DIR: $TIME_STEPS [$BEGIN_TIME:$END_TIME], binning $BINNING -> $TIME_STEPS_BINNED steps"
+log INFO "window size $WINDOW_SIZE -> last window index $NUM_WINDOWS"
 
-# conda activate ultrack
-
-# clean log dir
-rm ./slurm_output/$JOB_NAME/*.out -f
-if ! $SKIP_SEG; then
-    rm ./slurm_output/$JOB_NAME/segment/*.out -f
-fi
-if ! $SKIP_LINK; then
-    rm ./slurm_output/$JOB_NAME/link/*.out -f
-fi
-rm ./slurm_output/$JOB_NAME/solve/*.out -f
-
-mkdir -p slurm_output/$JOB_NAME
+# fresh log dirs for the stages that will run
+rm -f "$LOG_DIR"/*.out "$LOG_DIR"/segment/*.out "$LOG_DIR"/link/*.out "$LOG_DIR"/solve/*.out
+mkdir -p "$LOG_DIR/segment" "$LOG_DIR/link" "$LOG_DIR/solve"
 
 # The DB job writes "host:port" here once PostgreSQL accepts connections;
 # every worker waits for it (wait_for_db) instead of a fixed start delay.
-export ULTRACK_DB_READY_FILE="$PWD/slurm_output/$JOB_NAME/db_ready"
+export ULTRACK_DB_READY_FILE="$LOG_DIR/db_ready"
 rm -f "$ULTRACK_DB_READY_FILE"
-if ! $SKIP_SEG; then
-    mkdir -p slurm_output/$JOB_NAME/segment
-fi
-if ! $SKIP_LINK; then
-    mkdir -p slurm_output/$JOB_NAME/link
-fi
-mkdir -p slurm_output/$JOB_NAME/solve
+
+# Every submission goes through here and is recorded in the manifest, so a run
+# can be reconstructed (and inspected with sacct) from its log directory.
+MANIFEST="$LOG_DIR/submission.tsv"
+{
+    echo "# submitted $(date '+%F %T') by $USER on $(hostname -s) repo=$(ultrack_cluster_version)"
+    echo "# data=$DATA_DIR frames=$BEGIN_TIME-$END_TIME binning=$BINNING window_size=$WINDOW_SIZE last_window=$NUM_WINDOWS config=$CFG_FILE"
+    printf 'stage\tjob_id\tsbatch_args\n'
+} > "$MANIFEST"
+
+# submit <stage> <sbatch args...>: prints the job id (and only that on stdout)
+submit() {
+    local stage="$1"; shift
+    local id
+    # explicit: errexit does not apply inside $(...), where submit runs
+    id=$(sbatch --parsable "$@") || { log ERROR "sbatch failed for $stage"; return 1; }
+    id="${id%%;*}"   # --parsable may append ";cluster"
+    if [[ ! "$id" =~ ^[0-9]+$ ]]; then
+        log ERROR "sbatch returned no job id for $stage: '$id'"
+        return 1
+    fi
+    printf '%s\t%s\t%s\n' "$stage" "$id" "$*" >> "$MANIFEST"
+    log INFO "submitted $stage as job $id" >&2
+    echo "$id"
+}
+
 
 if $SKIP_SEG; then
-    SERVER_JOB_ID=$(sbatch --partition $LONG_PARTITION --job-name "DATABASE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/database-%j.out" --parsable resume_server.sh "$CFG_FILE")
-else
-    SERVER_JOB_ID=$(sbatch --partition $LONG_PARTITION --job-name "DATABASE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/database-%j.out" --parsable create_server.sh "$CFG_FILE")
-fi
-echo "Server creation job submited (ID: $SERVER_JOB_ID)"
-
-# limit node workers for the segmentation
-if $SKIP_SEG; then
+    SERVER_JOB_ID=$(submit db-server --partition "$LONG_PARTITION" --job-name "DATABASE_$JOB_NAME" \
+        --output "$LOG_DIR/database-%j.out" resume_server.sh "$CFG_FILE")
     SEGM_JOB_ID=$SERVER_JOB_ID
 else
-    # SEGM_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$DS_LENGTH%200 -d after:$SERVER_JOB_ID+1 segment.sh ../segmentation.zarr)
-    SEGM_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "SEGMENT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/segment/segment-%A_%a.out" --parsable --array=0-$DS_LENGTH%$MAX_JOBS -d after:$SERVER_JOB_ID segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
+    SERVER_JOB_ID=$(submit db-server --partition "$LONG_PARTITION" --job-name "DATABASE_$JOB_NAME" \
+        --output "$LOG_DIR/database-%j.out" create_server.sh "$CFG_FILE")
+    SEGM_JOB_ID=$(submit segment --partition "$SHORT_PARTITION" --job-name "SEGMENT_$JOB_NAME" \
+        --output "$LOG_DIR/segment/segment-%A_%a.out" --array="0-$DS_LENGTH%$MAX_JOBS" \
+        -d "after:$SERVER_JOB_ID" segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
 fi
 
 if [[ -d "../flow.zarr" ]]; then
-    if $SKIP_SEG; then
-        FLOW_JOB_ID=$(sbatch --partition $SHORT_PARTITION --parsable --mem 120GB --cpus-per-task=2 --job-name FLOW \
-            --output=./slurm_output/flow-%j.out -d after:$SEGM_JOB_ID \
-            ultrack add_flow ../flow.zarr -cfg $CFG_FILE -r napari -cha=1)
-    else
-        FLOW_JOB_ID=$(sbatch --partition $SHORT_PARTITION --parsable --mem 120GB --cpus-per-task=2 --job-name FLOW \
-            --output=./slurm_output/flow-%j.out -d afterok:$SEGM_JOB_ID \
-            ultrack add_flow ../flow.zarr -cfg $CFG_FILE -r napari -cha=1)
-    fi
+    # sbatch needs a script: the old `sbatch ... ultrack add_flow ...` form
+    # handed it the ultrack executable as the batch script.
+    flow_cmd="source '$ULTRACK_CLUSTER_DIR/ultrack_lib.sh' && activate_ultrack_env && wait_for_db && run_ultrack ultrack add_flow ../flow.zarr -cfg '$CFG_FILE' -r napari -cha=1"
+    if $SKIP_SEG; then flow_dep="after:$SEGM_JOB_ID"; else flow_dep="afterok:$SEGM_JOB_ID"; fi
+    FLOW_JOB_ID=$(submit flow --partition "$SHORT_PARTITION" --mem 120GB --cpus-per-task=2 --job-name "FLOW_$JOB_NAME" \
+        --output "$LOG_DIR/flow-%j.out" -d "$flow_dep" --wrap "bash -c \"$flow_cmd\"")
 else
     FLOW_JOB_ID=$SEGM_JOB_ID
 fi
 
-# link multi channel
-# LINK_JOB_ID=$(sbatch --partition $PARTITION --parsable --array=0-$((DS_LENGTH - 1))%200 -d afterok:$FLOW_JOB_ID link.sh -r napari-ome-zarr ../fused.zarr)
-
-# link single channel
-if $SKIP_SEG; then
-    if $SKIP_LINK; then
-        LINK_JOB_ID=$FLOW_JOB_ID
-    else
-        LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d after:$FLOW_JOB_ID link.sh "$CFG_FILE")
-    fi
+if $SKIP_LINK; then
+    LINK_JOB_ID=$FLOW_JOB_ID
 else
-    LINK_JOB_ID=$(sbatch --partition $SHORT_PARTITION --job-name "LINK_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/link/link-%A_%a.out" --parsable --array=0-$((DS_LENGTH - 1))%$MAX_JOBS -d afterok:$FLOW_JOB_ID link.sh "$CFG_FILE")
+    if $SKIP_SEG; then link_dep="after:$FLOW_JOB_ID"; else link_dep="afterok:$FLOW_JOB_ID"; fi
+    LINK_JOB_ID=$(submit link --partition "$SHORT_PARTITION" --job-name "LINK_$JOB_NAME" \
+        --output "$LOG_DIR/link/link-%A_%a.out" --array="0-$((DS_LENGTH - 1))%$MAX_JOBS" \
+        -d "$link_dep" link.sh "$CFG_FILE")
 fi
 
+# NUM_WINDOWS is the LAST window's 0-based index. Windows are solved in two
+# passes, even then odd, because each odd window's boundaries depend on its
+# even neighbours. With a single window (NUM_WINDOWS == 0) there is no odd
+# pass (--array=1-0:2 would be invalid).
+if $SKIP_LINK; then solve_dep="after:$LINK_JOB_ID"; else solve_dep="afterok:$LINK_JOB_ID"; fi
 if [[ $NUM_WINDOWS -eq 0 ]]; then
-    # Bug fix: this used to check "-eq 1", which is wrong. NUM_WINDOWS is
-    # the LAST window's 0-based index (ceil(DS_LENGTH/window_size) - 1),
-    # so NUM_WINDOWS==1 means TWO windows exist (indices 0 and 1) -- the
-    # general (else) branch below already handles that correctly via its
-    # own 0-$NUM_WINDOWS:2 / 1-$NUM_WINDOWS:2 array slicing. The special
-    # case actually needed is NUM_WINDOWS==0 (only ONE window, index 0,
-    # total), where the general branch's odd-window array (--array=1-0:2,
-    # start > end) would be an invalid SLURM array range. The old
-    # "-eq 1" special case instead submitted only --array=0-0 whenever
-    # NUM_WINDOWS was 1, silently never solving window 1 at all, and the
-    # export step then ran on an incomplete solve.
-    if $SKIP_LINK; then
-        SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d after:$LINK_JOB_ID solve.sh "$CFG_FILE")
-    else
-        SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-0 -d afterok:$LINK_JOB_ID solve.sh "$CFG_FILE")
-    fi
+    SOLVE_JOB_ID_1=$(submit solve --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
+        --output "$LOG_DIR/solve/solve-%A_%a.out" --array=0-0 -d "$solve_dep" solve.sh "$CFG_FILE")
 else
-    if $SKIP_LINK; then
-        SOLVE_JOB_ID_0=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-$NUM_WINDOWS:2 -d after:$LINK_JOB_ID solve.sh "$CFG_FILE")
-    else
-        SOLVE_JOB_ID_0=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=0-$NUM_WINDOWS:2 -d afterok:$LINK_JOB_ID solve.sh "$CFG_FILE")
-    fi
-    SOLVE_JOB_ID_1=$(sbatch --partition $SHORT_PARTITION --job-name "SOLVE_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/solve/solve-%A_%a.out" --parsable --array=1-$NUM_WINDOWS:2 -d afterok:$SOLVE_JOB_ID_0 solve.sh "$CFG_FILE")
+    SOLVE_JOB_ID_0=$(submit solve-even --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
+        --output "$LOG_DIR/solve/solve-%A_%a.out" --array="0-$NUM_WINDOWS:2" -d "$solve_dep" solve.sh "$CFG_FILE")
+    SOLVE_JOB_ID_1=$(submit solve-odd --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
+        --output "$LOG_DIR/solve/solve-%A_%a.out" --array="1-$NUM_WINDOWS:2" -d "afterok:$SOLVE_JOB_ID_0" solve.sh "$CFG_FILE")
 fi
 
-# sbatch --mem 500GB --partition $PARTITION --cpus-per-task=50 --job-name EXPORT \
-#     --output=./slurm_output/export-%j.out -d afterok:$SOLVE_JOB_ID_1 \
-#     ultrack export zarr-napari -cfg $CFG_FILE -o results \
-#     --measure -r napari-ome-zarr -i ../fused.zarr
-# EXPORT_JOB_ID=$(sbatch --job-name "EXPORT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/export-%j.out" export.sh)
-EXPORT_JOB_ID=$(sbatch --job-name "EXPORT_$JOB_NAME" --output "$PWD/slurm_output/$JOB_NAME/export-%j.out" -d afterok:$SOLVE_JOB_ID_1 export.sh "$CFG_FILE")
+EXPORT_JOB_ID=$(submit export --job-name "EXPORT_$JOB_NAME" --output "$LOG_DIR/export-%j.out" \
+    -d "afterok:$SOLVE_JOB_ID_1" export.sh "$CFG_FILE")
 
-# # stop DB server after job completion
-# while true; do
-#     if [[ $(squeue -j $SEGM_JOB_ID | wc -l) -eq 1 ]]; then
-#         scancel $SERVER_JOB_ID
-#         echo "DB server job stopped"
-#         break
-#     fi
-#     sleep 60  # Check every minute
-# done
+log INFO "all jobs submitted; manifest: $MANIFEST"

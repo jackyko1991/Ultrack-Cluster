@@ -29,7 +29,7 @@ export ULTRACK_CLUSTER_DIR
 source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
 CFG_FILE="${1:-${CFG_FILE:?usage: create_server.sh <ultrack config.toml> (or export CFG_FILE)}}"
-env | grep "^SLURM" | sort || true
+start_stage db-server
 
 # Starts PostgreSQL, waits until it accepts connections, writes its address
 # into $CFG_FILE and $ULTRACK_DB_READY_FILE, and serves until scancel'd.

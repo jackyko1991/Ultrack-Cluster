@@ -29,7 +29,7 @@ source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
 : "${1:?usage: link.sh <config.toml>}"
 
-env | grep "^SLURM" | sort || true
+start_stage link
 
 activate_ultrack_env || exit 1
 wait_for_db || exit 1

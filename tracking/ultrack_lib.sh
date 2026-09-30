@@ -6,6 +6,63 @@
 ULTRACK_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$ULTRACK_LIB_DIR/find_dasel.sh"
 
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+# One line format everywhere, so logs from the DB server, every array task and
+# main.sh can be grepped/merged:
+#   2026-09-30 17:06:02 [INFO ] [segment 32572995_3@compe006] message
+log() {
+    local level="$1"; shift
+    local task="${SLURM_JOB_ID:-local}"
+    if [[ -n "${SLURM_ARRAY_JOB_ID:-}" ]]; then
+        task="${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID:-}"
+    fi
+    local line
+    printf -v line '%s [%-5s] [%s %s@%s] %s' "$(date '+%F %T')" "$level" \
+        "${ULTRACK_STAGE:-ultrack}" "$task" "$(hostname -s 2>/dev/null || hostname)" "$*"
+    if [[ "$level" == INFO ]]; then
+        echo "$line"
+    else
+        echo "$line" >&2
+    fi
+}
+
+# Short commit of this repo (or "unknown"), recorded in every log/manifest.
+ultrack_cluster_version() {
+    git -C "$ULTRACK_LIB_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown
+}
+
+_ultrack_on_err() {
+    [[ -n "${_ULTRACK_QUIET_ERR:-}" ]] && return 0
+    log ERROR "command failed (exit $1) at line $2: $3"
+}
+
+_ultrack_on_exit() {
+    local rc=$1 elapsed=$(( SECONDS - ${ULTRACK_STAGE_START:-0} ))
+    if [[ -n "${ULTRACK_STOPPING:-}" ]]; then
+        log INFO "stopped by signal after ${elapsed}s"
+    elif (( rc == 0 )); then
+        log INFO "done in ${elapsed}s"
+    else
+        log ERROR "FAILED (exit $rc) after ${elapsed}s"
+    fi
+}
+
+# Call once at the top of a job: logs where/what it runs with, and arranges a
+# final "done in Ns" / "FAILED (exit N)" line plus the failing command.
+start_stage() {
+    export ULTRACK_STAGE="$1"
+    ULTRACK_STAGE_START=$SECONDS
+    set -E
+    trap '_ultrack_on_err $? $LINENO "$BASH_COMMAND"' ERR
+    trap '_ultrack_on_exit $?' EXIT
+    log INFO "start: job=${JOB_NAME:-} partition=${SLURM_JOB_PARTITION:-} cpus=${SLURM_CPUS_PER_TASK:-} mem=${SLURM_MEM_PER_NODE:-}MB repo=$(ultrack_cluster_version) cwd=$PWD"
+    if [[ -n "${ULTRACK_DEBUG:-}" ]]; then
+        env | grep '^SLURM' | sort || true
+    fi
+}
+
 # ceil(a / b) for non-negative integers a, b > 0.
 ceil_div() {
     echo $(( ($1 + $2 - 1) / $2 ))
@@ -27,15 +84,15 @@ last_batch_index() {
 ULTRACK_GUROBI_LICENSE_DEFAULT="/gpfs3/apps/eb/licenses/gurobi.lic"
 setup_gurobi_license() {
     if [[ -n "${GRB_LICENSE_FILE:-}" ]]; then
-        echo "Gurobi license: $GRB_LICENSE_FILE (preset)"
+        log INFO "Gurobi license: $GRB_LICENSE_FILE (preset)"
         return 0
     fi
     local lic="${ULTRACK_GUROBI_LICENSE:-$ULTRACK_GUROBI_LICENSE_DEFAULT}"
     if [[ -f "$lic" ]]; then
         export GRB_LICENSE_FILE="$lic"
-        echo "Gurobi license: $GRB_LICENSE_FILE"
+        log INFO "Gurobi license: $GRB_LICENSE_FILE"
     else
-        echo "WARNING: no Gurobi license at $lic (set ULTRACK_GUROBI_LICENSE); ultrack will fall back to the slower CBC solver" >&2
+        log WARN "no Gurobi license at $lic (set ULTRACK_GUROBI_LICENSE); ultrack will fall back to the slower CBC solver"
     fi
 }
 
@@ -49,7 +106,7 @@ setup_gurobi_license() {
 #   (none)                -> legacy: source ~/.bashrc; mamba activate cyto
 activate_ultrack_env() {
     if [[ -n "${ULTRACK_SIF:-}" ]]; then
-        echo "Environment: container $ULTRACK_SIF"
+        log INFO "environment: container $ULTRACK_SIF"
         return 0
     fi
     # rc files and activate scripts are rarely safe under `set -euo pipefail`.
@@ -57,6 +114,7 @@ activate_ultrack_env() {
     # subshell that drops errexit, so that would silently disable set -e.)
     local saved_flags=$-
     set +eu
+    _ULTRACK_QUIET_ERR=1
     if [[ -n "${ULTRACK_ENV_ACTIVATE:-}" ]]; then
         source "$ULTRACK_ENV_ACTIVATE"
     elif [[ -n "${ULTRACK_CONDA_ENV:-}" && -d "$ULTRACK_CONDA_ENV" ]]; then
@@ -69,34 +127,54 @@ activate_ultrack_env() {
         mamba activate cyto
     fi
     local rc=$?
+    unset _ULTRACK_QUIET_ERR
     if [[ $saved_flags == *u* ]]; then set -u; fi
     if [[ $saved_flags == *e* ]]; then set -e; fi
     if [[ $rc -ne 0 ]]; then
-        echo "ERROR: failed to activate the ultrack environment" >&2
+        log ERROR "failed to activate the ultrack environment"
         return 1
     fi
-    echo "Environment: python=$(command -v python || echo MISSING)"
+    log INFO "environment: python=$(command -v python || echo MISSING)"
 }
 
-# Run an ultrack/python command, inside ULTRACK_SIF when set. Bind mounts
-# default to the BMRC filesystems that exist on this node; override with
-# ULTRACK_SIF_ARGS.
-run_ultrack() {
-    if [[ -z "${ULTRACK_SIF:-}" ]]; then
-        "$@"
-        return
-    fi
-    local args
+# apptainer bind arguments, one per line: ULTRACK_SIF_ARGS (word-split) if
+# set, else --bind for each BMRC filesystem present on this node.
+ultrack_sif_args() {
     if [[ -n "${ULTRACK_SIF_ARGS+x}" ]]; then
-        read -r -a args <<< "$ULTRACK_SIF_ARGS"
+        local a
+        for a in $ULTRACK_SIF_ARGS; do echo "$a"; done
     else
-        args=()
         local p
         for p in /gpfs3 /well /users; do
-            [[ -d "$p" ]] && args+=(--bind "$p")
+            if [[ -d "$p" ]]; then printf '%s\n' --bind "$p"; fi
         done
     fi
-    apptainer exec ${args[@]+"${args[@]}"} "$ULTRACK_SIF" "$@"
+}
+
+# Run an ultrack/python/postgres command, inside ULTRACK_SIF when set. Logs
+# the expanded command on failure and returns its exit code.
+run_ultrack() {
+    local rc=0
+    if [[ -z "${ULTRACK_SIF:-}" ]]; then
+        "$@" || rc=$?
+    else
+        local args
+        mapfile -t args < <(ultrack_sif_args)
+        apptainer exec ${args[@]+"${args[@]}"} "$ULTRACK_SIF" "$@" || rc=$?
+    fi
+    if (( rc != 0 )); then log ERROR "exit $rc: $*"; fi
+    return "$rc"
+}
+
+# Like run_ultrack, but replaces the current (sub)shell -- for long-running
+# processes whose PID must be the real process (e.g. `exec_ultrack postgres &`).
+exec_ultrack() {
+    if [[ -z "${ULTRACK_SIF:-}" ]]; then
+        exec "$@"
+    fi
+    local args
+    mapfile -t args < <(ultrack_sif_args)
+    exec apptainer exec ${args[@]+"${args[@]}"} "$ULTRACK_SIF" "$@"
 }
 
 # ---------------------------------------------------------------------------
@@ -115,7 +193,7 @@ load_postgres() {
         module load "$mod"
     fi
     if ! command -v postgres >/dev/null; then
-        echo "ERROR: postgres not found (module '$mod'); set ULTRACK_PG_MODULE or ULTRACK_SIF" >&2
+        log ERROR "postgres not found (module '$mod'); set ULTRACK_PG_MODULE or ULTRACK_SIF"
         return 1
     fi
 }
@@ -185,7 +263,7 @@ find_free_port() {
             return 0
         fi
     done
-    echo "ERROR: no free port in $base-$((base + span))" >&2
+    log ERROR "no free port in $base-$((base + span))"
     return 1
 }
 
@@ -195,7 +273,7 @@ wait_for_local_postgres() {
     local socket_dir="$1" port="$2" timeout="${ULTRACK_DB_START_TIMEOUT:-300}" waited=0
     until run_ultrack pg_isready -q -h "$socket_dir" -p "$port"; do
         if (( waited >= timeout )); then
-            echo "ERROR: PostgreSQL not ready after ${timeout}s" >&2
+            log ERROR "PostgreSQL not ready after ${timeout}s"
             return 1
         fi
         sleep 1
@@ -230,7 +308,7 @@ run_db_server() {
         run_ultrack initdb -D "$db_dir" || return 1
         echo "host    all             $USER           samenet                 md5" >> "$db_dir/pg_hba.conf"
     elif [[ ! -d "$db_dir" ]]; then
-        echo "ERROR: no database to resume at $db_dir (run create_server.sh first)" >&2
+        log ERROR "no database to resume at $db_dir (run create_server.sh first)"
         return 1
     fi
 
@@ -238,12 +316,14 @@ run_db_server() {
     port=$(find_free_port 5432 100) || return 1
     local tuning=()
     mapfile -t tuning < <(pg_tuning_args)
-    echo "Starting PostgreSQL ($mode) on $host:$port, data $db_dir"
-    run_ultrack postgres -D "$db_dir" -p "$port" -k "$socket_dir" "${tuning[@]}" &
+    log INFO "starting PostgreSQL ($mode) on $host:$port, data $db_dir"
+    # exec_ultrack, so $! is PostgreSQL itself (or apptainer), not a bash
+    # subshell wrapping it -- otherwise killing $! would leave it running.
+    exec_ultrack postgres -D "$db_dir" -p "$port" -k "$socket_dir" "${tuning[@]}" &
     ULTRACK_PG_PID=$!
     # scancel sends SIGTERM to this script: shut PostgreSQL down cleanly so
     # the data directory stays consistent for a later resume.
-    trap 'run_ultrack pg_ctl stop -D "'"$db_dir"'" -m fast || true; rm -f "${ULTRACK_DB_READY_FILE:-/nonexistent}"' TERM INT
+    trap 'ULTRACK_STOPPING=1; log INFO "stopping PostgreSQL"; run_ultrack pg_ctl stop -D "'"$db_dir"'" -m fast || true; kill "$ULTRACK_PG_PID" 2>/dev/null || true; rm -f "${ULTRACK_DB_READY_FILE:-/nonexistent}"; exit 0' TERM INT
     if ! wait_for_local_postgres "$socket_dir" "$port"; then
         kill "$ULTRACK_PG_PID" 2>/dev/null || true
         return 1
@@ -263,7 +343,7 @@ run_db_server() {
         mkdir -p "$(dirname "$ULTRACK_DB_READY_FILE")"
         echo "$host:$port" > "$ULTRACK_DB_READY_FILE"
     fi
-    echo "Ultrack DB service ready at $host:$port"
+    log INFO "DB ready at $host:$port"
     wait "$ULTRACK_PG_PID"
 }
 
@@ -280,10 +360,10 @@ wait_for_db() {
           host_port=$(<"$ULTRACK_DB_READY_FILE") &&
           (exec 3<>"/dev/tcp/${host_port%:*}/${host_port##*:}") 2>/dev/null; do
         if (( SECONDS - start >= timeout )); then
-            echo "ERROR: DB not reachable after ${timeout}s (ready file: $ULTRACK_DB_READY_FILE)" >&2
+            log ERROR "DB not reachable after ${timeout}s (ready file: $ULTRACK_DB_READY_FILE)"
             return 1
         fi
         sleep "$poll"
     done
-    echo "DB reachable at $host_port after $(( SECONDS - start ))s"
+    log INFO "DB reachable at $host_port after $(( SECONDS - start ))s"
 }
