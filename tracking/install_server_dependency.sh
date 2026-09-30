@@ -7,7 +7,7 @@ INSTALL_DIR="/users/$GROUP_NAME/$USER/work/software"
 # ======== dasel ========
 DASEL_DIR=$INSTALL_DIR/dasel
 mkdir $DASEL_DIR
-wget https://github.com/TomWright/dasel/releases/latest/download/dasel_linux_amd64 -O $DASEL_DIR/dasel -r
+wget https://github.com/TomWright/dasel/releases/download/v2.8.1/dasel_linux_amd64 -O $DASEL_DIR/dasel -r
 chmod a+x $DASEL_DIR
 chmod a+x $DASEL_DIR/dasel
 

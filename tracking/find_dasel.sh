@@ -32,7 +32,7 @@ resolve_dasel() {
 
     echo "dasel not found on PATH or at $bin_path -- downloading (see install_server_dependency.sh)" >&2
     mkdir -p "$install_dir"
-    if wget -q "https://github.com/TomWright/dasel/releases/latest/download/dasel_linux_amd64" -O "$bin_path" && chmod +x "$bin_path"; then
+    if wget -q "https://github.com/TomWright/dasel/releases/download/v2.8.1/dasel_linux_amd64" -O "$bin_path" && chmod +x "$bin_path"; then
         echo "$bin_path"
         return 0
     fi

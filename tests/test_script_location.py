@@ -43,3 +43,11 @@ echo 1001
     assert r.returncode == 0, r.stderr + r.stdout
     seen = set((cluster.logdir / "sbatch_env").read_text().split())
     assert seen == {str(cluster.workdir)}
+
+
+def test_dasel_downloads_are_pinned_to_v2(cluster):
+    # dasel v3 may change the CLI; main.sh and run_db_server use v2 syntax
+    for script in ["find_dasel.sh", "install_server_dependency.sh"]:
+        text = (cluster.workdir / script).read_text()
+        assert "releases/latest" not in text, script
+        assert "releases/download/v2." in text, script
