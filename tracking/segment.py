@@ -154,7 +154,9 @@ def main(args):
     edges = create_zarr(label.shape, dtype=np.float32, store_or_path=zarr.storage.MemoryStore())
 
     # scipy's gaussian_filter reaches int(truncate * sigma + 0.5) frames (truncate = 4)
-    if args.blur_padding == "auto":
+    if args.mode == "image":
+        args.blur_padding = 0     # no temporal blur in image mode: padded frames would be wasted work
+    elif args.blur_padding == "auto":
         args.blur_padding = int(4.0 * sigma_t + 0.5) if sigma_t > 0 else 0
     args.blur_padding = int(args.blur_padding)
 
