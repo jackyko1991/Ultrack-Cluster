@@ -1,5 +1,6 @@
 #! /bin/bash
-################# FILE CONFIGURATIONS ################# 
+source "$(dirname "${BASH_SOURCE[0]}")/find_dasel.sh"
+################# FILE CONFIGURATIONS #################
 DATA_DIR="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_03_Nyeso1_HCT116_framerate_10sec_flowrate_0p15mlperh/register_denoising_gamma_channel_merged_cropped/cancer_batch5"
 LABEL_PATH_PATTERN=$DATA_DIR/*.tif
 TIME_LENGTH=$(ls $DATA_DIR -1 | wc -l)
@@ -63,7 +64,8 @@ ceil() {
 
 TIME_STEPS_BINNED=$((TIME_STEPS/BINNING))
 export DS_LENGTH=$((TIME_STEPS_BINNED-1)) # number of time points - 1
-WINDOW_SIZE=$(dasel -f $CFG_FILE "tracking.window_size")
+export DASEL_BIN=$(resolve_dasel) || exit 1
+WINDOW_SIZE=$($DASEL_BIN -f $CFG_FILE "tracking.window_size")
 # NUM_WINDOWS=ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
 NUM_WINDOWS=$(echo "scale=2;$DS_LENGTH / $WINDOW_SIZE" | bc)
 NUM_WINDOWS=$(ceil $NUM_WINDOWS)

@@ -103,7 +103,7 @@ DB_ADDR="$USER:$ULTRACK_DB_PW@$SLURM_JOB_NODELIST:$AVAILABLE_PORT/ultrack?gssenc
 # update config file
 echo ""
 echo "$(date +'%Y-%m-%d %H:%M:%S') Server running on uri $DB_ADDR"
-dasel put -t string -f $CFG_FILE -v $DB_ADDR "data.address"
+${DASEL_BIN:-dasel} put -t string -f $CFG_FILE -v $DB_ADDR "data.address"
 # dasel put string -f $CFG_FILE "data.address" $DB_ADDR
 # $CFG_FILE now has $ULTRACK_DB_PW embedded in plaintext (ultrack's own
 # DataConfig.address format has no separate credentials field) -- this
