@@ -1,5 +1,7 @@
 #! /bin/bash
 source "$(dirname "${BASH_SOURCE[0]}")/ultrack_lib.sh"
+# Job scripts run from SLURM's spool dir, so tell them where this repo is.
+export ULTRACK_CLUSTER_DIR="$ULTRACK_LIB_DIR"
 ################# FILE CONFIGURATIONS #################
 # Every setting below can be overridden from the environment, e.g.
 #   DATA_DIR=/path/to/labels BATCH_SIZE=40 bash main.sh

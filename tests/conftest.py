@@ -54,7 +54,7 @@ echo "$(basename "$0") $*" >> "$STUB_LOG_DIR/calls.log"
 
 GENERIC_TOOLS = [
     "scancel", "sacct", "squeue", "module", "initdb", "pg_ctl", "createdb",
-    "psql", "postgres", "lsof", "ultrack", "python", "apptainer",
+    "psql", "postgres", "lsof", "ultrack", "python", "apptainer", "mamba",
 ]
 
 
@@ -69,6 +69,7 @@ class Cluster:
         self.logdir.mkdir()
         self.datadir = root / "labels"
         self.datadir.mkdir()
+        (root / ".bashrc").touch()
         self.stub("sbatch", SBATCH_STUB)
         self.stub("dasel", DASEL_STUB)
         self.stub("getent", "#!/bin/bash\necho 'testgroup:x:1000:'\n")
@@ -106,6 +107,16 @@ class Cluster:
         return subprocess.run(
             ["bash", script, *args], cwd=self.workdir, env=self.env(**env),
             capture_output=True, text=True, timeout=60,
+        )
+
+    def run_as_slurm_job(self, script: str, *args: str, **env) -> subprocess.CompletedProcess:
+        """Run a job script the way sbatch does: from a spooled copy elsewhere."""
+        spool = self.root / "spool" / script
+        spool.mkdir(parents=True, exist_ok=True)
+        shutil.copy(self.workdir / script, spool / "slurm_script")
+        return subprocess.run(
+            ["bash", str(spool / "slurm_script"), *args], cwd=self.workdir,
+            env=self.env(**env), capture_output=True, text=True, timeout=60,
         )
 
     def bash(self, snippet: str, **env) -> subprocess.CompletedProcess:
