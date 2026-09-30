@@ -107,7 +107,7 @@ else
         --output "$LOG_DIR/database-%j.out" create_server.sh "$CFG_FILE")
     SEGM_JOB_ID=$(submit segment --partition "$SHORT_PARTITION" --job-name "SEGMENT_$JOB_NAME" \
         --output "$LOG_DIR/segment/segment-%A_%a.out" --array="0-$DS_LENGTH%$MAX_JOBS" \
-        -d "after:$SERVER_JOB_ID" segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
+        -d "after:$SERVER_JOB_ID" --kill-on-invalid-dep=yes segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
 fi
 
 if [[ -d "../flow.zarr" ]]; then
@@ -116,7 +116,7 @@ if [[ -d "../flow.zarr" ]]; then
     flow_cmd="source '$ULTRACK_CLUSTER_DIR/ultrack_lib.sh' && activate_ultrack_env && wait_for_db && run_ultrack ultrack add_flow ../flow.zarr -cfg '$CFG_FILE' -r napari -cha=1"
     if $SKIP_SEG; then flow_dep="after:$SEGM_JOB_ID"; else flow_dep="afterok:$SEGM_JOB_ID"; fi
     FLOW_JOB_ID=$(submit flow --partition "$SHORT_PARTITION" --mem 120GB --cpus-per-task=2 --job-name "FLOW_$JOB_NAME" \
-        --output "$LOG_DIR/flow-%j.out" -d "$flow_dep" --wrap "bash -c \"$flow_cmd\"")
+        --output "$LOG_DIR/flow-%j.out" -d "$flow_dep" --kill-on-invalid-dep=yes --wrap "bash -c \"$flow_cmd\"")
 else
     FLOW_JOB_ID=$SEGM_JOB_ID
 fi
@@ -127,7 +127,7 @@ else
     if $SKIP_SEG; then link_dep="after:$FLOW_JOB_ID"; else link_dep="afterok:$FLOW_JOB_ID"; fi
     LINK_JOB_ID=$(submit link --partition "$SHORT_PARTITION" --job-name "LINK_$JOB_NAME" \
         --output "$LOG_DIR/link/link-%A_%a.out" --array="0-$((DS_LENGTH - 1))%$MAX_JOBS" \
-        -d "$link_dep" link.sh "$CFG_FILE")
+        -d "$link_dep" --kill-on-invalid-dep=yes link.sh "$CFG_FILE")
 fi
 
 # NUM_WINDOWS is the LAST window's 0-based index. Windows are solved in two
@@ -137,15 +137,26 @@ fi
 if $SKIP_LINK; then solve_dep="after:$LINK_JOB_ID"; else solve_dep="afterok:$LINK_JOB_ID"; fi
 if [[ $NUM_WINDOWS -eq 0 ]]; then
     SOLVE_JOB_ID_1=$(submit solve --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
-        --output "$LOG_DIR/solve/solve-%A_%a.out" --array=0-0 -d "$solve_dep" solve.sh "$CFG_FILE")
+        --output "$LOG_DIR/solve/solve-%A_%a.out" --array=0-0 -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
 else
     SOLVE_JOB_ID_0=$(submit solve-even --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
-        --output "$LOG_DIR/solve/solve-%A_%a.out" --array="0-$NUM_WINDOWS:2" -d "$solve_dep" solve.sh "$CFG_FILE")
+        --output "$LOG_DIR/solve/solve-%A_%a.out" --array="0-$NUM_WINDOWS:2" -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
     SOLVE_JOB_ID_1=$(submit solve-odd --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
-        --output "$LOG_DIR/solve/solve-%A_%a.out" --array="1-$NUM_WINDOWS:2" -d "afterok:$SOLVE_JOB_ID_0" solve.sh "$CFG_FILE")
+        --output "$LOG_DIR/solve/solve-%A_%a.out" --array="1-$NUM_WINDOWS:2" -d "afterok:$SOLVE_JOB_ID_0" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
 fi
 
 EXPORT_JOB_ID=$(submit export --job-name "EXPORT_$JOB_NAME" --output "$LOG_DIR/export-%j.out" \
-    -d "afterok:$SOLVE_JOB_ID_1" export.sh "$CFG_FILE")
+    -d "afterok:$SOLVE_JOB_ID_1" --kill-on-invalid-dep=yes export.sh "$CFG_FILE")
+
+# Stop the DB server once export ends in any state (upstream failures cancel
+# the chain via --kill-on-invalid-dep, so export always ends) and record what
+# every job actually used. KEEP_DB=true keeps the server for parameter sweeps.
+if ! ${KEEP_DB:-false}; then
+    CLEANUP_JOB_ID=$(submit cleanup --partition "$SHORT_PARTITION" --job-name "CLEANUP_$JOB_NAME" \
+        --output "$LOG_DIR/cleanup-%j.out" -d "afterany:$EXPORT_JOB_ID" \
+        cleanup.sh "$SERVER_JOB_ID" "$MANIFEST")
+else
+    log WARN "KEEP_DB=true: DB server job $SERVER_JOB_ID keeps running until you scancel it"
+fi
 
 log INFO "all jobs submitted; manifest: $MANIFEST"

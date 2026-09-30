@@ -369,3 +369,22 @@ wait_for_db() {
     done
     log INFO "DB reachable at $host_port after $(( SECONDS - start ))s"
 }
+
+# sacct table + per-stage summary (resource_report.py) for every job in a
+# main.sh submission manifest. Best effort: never fails the caller.
+#   $1 manifest (submission.tsv)   $2 output .tsv for the raw sacct table
+write_resource_report() {
+    local manifest="$1" out="$2" ids
+    ids=$(awk -F'\t' '!/^#/ && $2 ~ /^[0-9]+$/ {print $2}' "$manifest" | paste -sd, -)
+    if [[ -z "$ids" ]]; then
+        log WARN "no job ids in $manifest"
+        return 0
+    fi
+    if ! sacct -j "$ids" -P \
+        --format=JobID,JobName,State,ExitCode,Elapsed,ElapsedRaw,ReqMem,MaxRSS,AllocCPUS,TotalCPU > "$out"; then
+        log WARN "sacct failed; no resource report"
+        return 0
+    fi
+    python3 "$ULTRACK_LIB_DIR/resource_report.py" "$manifest" "$out" ||
+        log WARN "could not summarise $out"
+}

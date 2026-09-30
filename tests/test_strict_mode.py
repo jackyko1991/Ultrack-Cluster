@@ -1,7 +1,7 @@
 """Failures must fail the job (no more 'COMPLETED' with nothing done)."""
 import pytest
 
-SCRIPTS = ["main.sh", "segment.sh", "link.sh", "solve.sh", "export.sh",
+SCRIPTS = ["main.sh", "segment.sh", "link.sh", "solve.sh", "export.sh", "cleanup.sh",
            "create_server.sh", "resume_server.sh"]
 FAILING = "#!/bin/bash\necho \"$(basename \"$0\") $*\" >> \"$STUB_LOG_DIR/calls.log\"\nexit 3\n"
 
