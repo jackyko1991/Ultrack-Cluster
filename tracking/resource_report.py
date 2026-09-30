@@ -45,6 +45,9 @@ def cpu_seconds(value):
 
 
 def stages_by_job(manifest):
+    """{job id: (stage, job name)} from a main.sh submission manifest; the job
+    name (the submitted --job-name) guards against Slurm job-id reuse, as
+    sacct -j can also return an older, unrelated job with the same id."""
     out = {}
     with open(manifest) as f:
         for line in f:
@@ -52,7 +55,8 @@ def stages_by_job(manifest):
                 continue
             cols = line.rstrip("\n").split("\t")
             if len(cols) >= 2 and cols[1].isdigit():
-                out[cols[1]] = cols[0]
+                name = re.search(r"--job-name[ =](\S+)", cols[2]) if len(cols) > 2 else None
+                out[cols[1]] = (cols[0], name.group(1) if name else None)
     return out
 
 
@@ -61,11 +65,18 @@ def summarise(manifest, sacct_file):
     stats = OrderedDict()
     with open(sacct_file) as f:
         rows = list(csv.DictReader(f, delimiter="|"))
+    ours = set()   # job/array-task ids whose name matched the manifest
     for row in rows:
         job_id = row["JobID"]
         base = re.split(r"[_.]", job_id)[0]
-        stage = stage_of.get(base)
-        if stage is None:
+        if base not in stage_of:
+            continue
+        stage, name = stage_of[base]
+        if "." not in job_id:
+            if name and row.get("JobName") != name:
+                continue                            # same id, someone else's job
+            ours.add(job_id)
+        elif job_id.split(".")[0] not in ours:
             continue
         st = stats.setdefault(stage, {"tasks": 0, "states": OrderedDict(), "req": 0.0,
                                       "rss": 0.0, "cpu": 0.0, "wall_cpu": 0.0, "elapsed": []})

@@ -13,6 +13,8 @@ SACCT = """JobID|JobName|State|ExitCode|Elapsed|ElapsedRaw|ReqMem|MaxRSS|AllocCP
 1004_0.batch|batch|COMPLETED|0:0|00:11:37|697||3718324K|2|10:19.221
 1005|EXPORT_j|FAILED|1:0|00:00:05|5|4000Mc||2|00:01.000
 1005.batch|batch|FAILED|1:0|00:00:05|5||102400K|2|00:01.000
+1003_1|bb_someone_else|COMPLETED|0:0|00:52:44|3164|64G||8|06:00:00.000
+1003_1.batch|batch|COMPLETED|0:0|00:52:44|3164||9999999K|8|06:00:00.000
 """
 
 
@@ -52,7 +54,8 @@ def _manifest(cluster):
     m = cluster.root / "run" / "submission.tsv"
     m.parent.mkdir()
     m.write_text("# submitted ...\n# data=...\nstage\tjob_id\tsbatch_args\n"
-                 "db-server\t1001\tx\nsegment\t1002\tx\nlink\t1003\tx\nsolve\t1004\tx\nexport\t1005\tx\n")
+                 "db-server\t1001\t--job-name DATABASE_j x\nsegment\t1002\t--job-name SEGMENT_j x\n"
+                 "link\t1003\t--job-name LINK_j x\nsolve\t1004\t--job-name SOLVE_j x\nexport\t1005\t--job-name EXPORT_j x\n")
     return m
 
 
@@ -62,10 +65,12 @@ def test_cleanup_stops_server_and_reports_resources(cluster):
     r = cluster.run_as_slurm_job("cleanup.sh", "1001", str(m), SLURM_SUBMIT_DIR=cluster.workdir)
     assert r.returncode == 0, r.stderr + r.stdout
     assert cluster.calls("scancel") == ["scancel 1001"]
-    assert "-j 1001,1002,1003,1004,1005" in cluster.calls("sacct")[0]
+    call = cluster.calls("sacct")[0]
+    assert "-j 1001,1002,1003,1004,1005" in call and "-u testuser" in call
     summary = (m.parent / "resource_report_summary.tsv").read_text().splitlines()
     rows = {l.split("\t")[0]: dict(zip(summary[0].split("\t"), l.split("\t"))) for l in summary[1:]}
     seg, solve, exp = rows["segment"], rows["solve"], rows["export"]
+    assert "link" not in rows            # job 1003 in sacct is someone else's (reused id): ignored
     assert seg["tasks"] == "2" and seg["states"] == "COMPLETED:2"
     assert seg["req_mem_mb"] == "15360" and seg["max_rss_mb"] == "639"
     assert seg["mem_used_pct"] == "4" and seg["suggested_mem_gb"] == "1"

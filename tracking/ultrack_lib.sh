@@ -428,7 +428,11 @@ write_resource_report() {
         log WARN "no job ids in $manifest"
         return 0
     fi
-    if ! sacct -j "$ids" -P \
+    # our jobs only, since this run was submitted: sacct -j also returns older
+    # jobs of other users that reused the same ids
+    local since
+    since=$(sed -n 's/^# submitted \([0-9-]* [0-9:]*\).*/\1/p' "$manifest" | head -1 | tr ' ' T)
+    if ! sacct -j "$ids" -u "$USER" ${since:+-S "$since"} -P \
         --format=JobID,JobName,State,ExitCode,Elapsed,ElapsedRaw,ReqMem,MaxRSS,AllocCPUS,TotalCPU > "$out"; then
         log WARN "sacct failed; no resource report"
         return 0
