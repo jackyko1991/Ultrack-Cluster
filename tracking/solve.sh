@@ -9,6 +9,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --output=./slurm_output/solve/solve-%A_%a.out
 
+set -euo pipefail  # after the #SBATCH block: sbatch stops reading directives at the first command
+
 # Locate this repo's tracking/ directory. Inside a SLURM job $0 is SLURM's
 # spooled copy of this script (e.g. /var/spool/slurmd/job123/slurm_script),
 # not this file, so dirname "$0" alone cannot find sibling files.
@@ -25,9 +27,11 @@ fi
 export ULTRACK_CLUSTER_DIR
 source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
-env | grep "^SLURM" | sort
+: "${1:?usage: solve.sh <config.toml>}"
+
+env | grep "^SLURM" | sort || true
 
 activate_ultrack_env || exit 1
 wait_for_db || exit 1
 setup_gurobi_license
-run_ultrack ultrack solve -cfg "$1" -b $SLURM_ARRAY_TASK_ID
+run_ultrack ultrack solve -cfg "$1" -b "${SLURM_ARRAY_TASK_ID:?must run as a SLURM array task (sbatch --array)}"

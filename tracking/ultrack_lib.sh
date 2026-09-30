@@ -96,7 +96,7 @@ run_ultrack() {
             [[ -d "$p" ]] && args+=(--bind "$p")
         done
     fi
-    apptainer exec "${args[@]}" "$ULTRACK_SIF" "$@"
+    apptainer exec ${args[@]+"${args[@]}"} "$ULTRACK_SIF" "$@"
 }
 
 # ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ run_db_server() {
     : "${ULTRACK_DB_PW:?ULTRACK_DB_PW must be set}"
     local tag="${JOB_NAME:-${SLURM_JOB_ID:?set JOB_NAME or run under SLURM}}"
     local group
-    group=$(getent group "$(id -g)" | cut -d: -f1)
+    group=$(getent group "$(id -g)" | cut -d: -f1 || true)
     local work="${ULTRACK_WORK_DIR:-/users/$group/$USER/work}"
     local db_dir="$work/postgresql_ultrack_$tag"
     local socket_dir="$work/tmp_$tag"

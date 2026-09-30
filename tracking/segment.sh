@@ -10,6 +10,8 @@
 #SBATCH --output=./slurm_output/segment/segment-%A_%a.out
 #SBATCH --requeue
 
+set -euo pipefail  # after the #SBATCH block: sbatch stops reading directives at the first command
+
 # Locate this repo's tracking/ directory. Inside a SLURM job $0 is SLURM's
 # spooled copy of this script (e.g. /var/spool/slurmd/job123/slurm_script),
 # not this file, so dirname "$0" alone cannot find sibling files.
@@ -26,7 +28,9 @@ fi
 export ULTRACK_CLUSTER_DIR
 source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
-env | grep "^SLURM" | sort
+: "${4:?usage: segment.sh <label path pattern> <config.toml> <begin time> <end time>}"
+
+env | grep "^SLURM" | sort || true
 
 activate_ultrack_env || exit 1
 wait_for_db || exit 1
@@ -36,4 +40,4 @@ wait_for_db || exit 1
 
 # binning will automatically take care of length of data, for specfic time range edit in main.sh
 # reserver length for reference
-run_ultrack python "$ULTRACK_CLUSTER_DIR/segment.py" -p "$1" --cfg "$2" -b "$3" -e "$4" -bi $SLURM_ARRAY_TASK_ID -bp 3
+run_ultrack python "$ULTRACK_CLUSTER_DIR/segment.py" -p "$1" --cfg "$2" -b "$3" -e "$4" -bi "${SLURM_ARRAY_TASK_ID:?must run as a SLURM array task (sbatch --array)}" -bp 3

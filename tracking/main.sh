@@ -1,4 +1,5 @@
 #! /bin/bash
+set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/ultrack_lib.sh"
 # Job scripts run from SLURM's spool dir, so tell them where this repo is.
 export ULTRACK_CLUSTER_DIR="$ULTRACK_LIB_DIR"
@@ -46,8 +47,14 @@ SHORT_PARTITION="${SHORT_PARTITION:-short}" # short/long on BMRC
 
 ################# ULTRACK VARIABLE AUTO SETTING #################
 TIME_STEPS_BINNED=$((TIME_STEPS/BINNING))
+if (( TIME_STEPS_BINNED < 2 )); then
+    echo "ERROR: need at least 2 time points to track, got $TIME_STEPS_BINNED from $DATA_DIR [$BEGIN_TIME:$END_TIME]" >&2
+    exit 1
+fi
 export DS_LENGTH=$((TIME_STEPS_BINNED-1)) # number of time points - 1
-export DASEL_BIN=$(resolve_dasel) || exit 1
+# (not `export X=$(cmd)`: export's own status would hide cmd's failure)
+DASEL_BIN=$(resolve_dasel)
+export DASEL_BIN
 WINDOW_SIZE=$($DASEL_BIN -f $CFG_FILE "tracking.window_size")
 # last 0-based window index: ceil(DS_LENGTH / window_size) - 1
 NUM_WINDOWS=$(last_batch_index "$DS_LENGTH" "$WINDOW_SIZE")

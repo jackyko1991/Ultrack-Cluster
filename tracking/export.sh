@@ -9,6 +9,8 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --output=./slurm_output/export-%j.out
 
+set -euo pipefail  # after the #SBATCH block: sbatch stops reading directives at the first command
+
 # Locate this repo's tracking/ directory. Inside a SLURM job $0 is SLURM's
 # spooled copy of this script (e.g. /var/spool/slurmd/job123/slurm_script),
 # not this file, so dirname "$0" alone cannot find sibling files.
@@ -25,15 +27,17 @@ fi
 export ULTRACK_CLUSTER_DIR
 source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
+: "${1:?usage: export.sh <config.toml> [output dir]}"
+
 activate_ultrack_env || exit 1
 wait_for_db || exit 1
 
-env | grep "^SLURM" | sort
+env | grep "^SLURM" | sort || true
 
 echo "Config file: $1"
 # check if the output dir is provided
-if [[ -z "$2" ]]; then
-    directory="$PWD/results/$JOB_NAME"
+if [[ -z "${2:-}" ]]; then
+    directory="$PWD/results/${JOB_NAME:-export}"
 else
     directory="$2"
 fi

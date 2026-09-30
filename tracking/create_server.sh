@@ -10,6 +10,8 @@
 #SBATCH --dependency=singleton
 #SBATCH --output=./slurm_output/database-%j.out
 
+set -euo pipefail  # after the #SBATCH block: sbatch stops reading directives at the first command
+
 # Locate this repo's tracking/ directory. Inside a SLURM job $0 is SLURM's
 # spooled copy of this script (e.g. /var/spool/slurmd/job123/slurm_script),
 # not this file, so dirname "$0" alone cannot find sibling files.
