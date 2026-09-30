@@ -240,6 +240,11 @@ pg_tuning_args() {
         -c "effective_io_concurrency=200"
         -c "logging_collector=on"
     )
+    if [[ "${ULTRACK_DB_EPHEMERAL:-false}" == true ]]; then
+        # the DB is rebuilt from the labels anyway: trade crash safety for
+        # insert speed (segment/link are INSERT-heavy)
+        args+=(-c "fsync=off" -c "synchronous_commit=off" -c "full_page_writes=off")
+    fi
     printf '%s\n' "${args[@]}"
 }
 
@@ -296,6 +301,14 @@ run_db_server() {
     group=$(getent group "$(id -g)" | cut -d: -f1 || true)
     local work="${ULTRACK_WORK_DIR:-/users/$group/$USER/work}"
     local db_dir="$work/postgresql_ultrack_$tag"
+    if [[ "${ULTRACK_DB_EPHEMERAL:-false}" == true ]]; then
+        if [[ "$mode" == resume ]]; then
+            log ERROR "ULTRACK_DB_EPHEMERAL=true keeps no database to resume"
+            return 1
+        fi
+        # node-local disk (SLURM's per-job TMPDIR), not GPFS; gone with the job
+        db_dir="${TMPDIR:-/tmp}/postgresql_ultrack_$tag"
+    fi
     local socket_dir="$work/tmp_$tag"
     local db_name="ultrack"
     local host="${SLURM_JOB_NODELIST:-$(hostname)}"

@@ -40,6 +40,13 @@ fi
 # TODO: skip solve for direct export
 # SKIP_SOLVE=false
 
+# ULTRACK_DB_EPHEMERAL=true: DB on the server node's local disk with fsync off
+# (faster inserts, nothing kept afterwards -- so no resume).
+if [[ "${ULTRACK_DB_EPHEMERAL:-false}" == true ]] && $SKIP_SEG; then
+    log ERROR "ULTRACK_DB_EPHEMERAL=true cannot resume an existing DB (SKIP_SEG/SKIP_LINK=true)"
+    exit 1
+fi
+
 ################# BMRC CONFIGURATIONS #################
 LONG_PARTITION="${LONG_PARTITION:-long}"
 SHORT_PARTITION="${SHORT_PARTITION:-short}" # short/long on BMRC

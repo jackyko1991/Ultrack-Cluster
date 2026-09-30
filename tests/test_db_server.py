@@ -157,3 +157,38 @@ def test_port_check_falls_back_to_lsof_without_ss(cluster):
         import pytest
         pytest.skip("ss is in /bin or /usr/bin here; fallback not reachable")
     assert "busy5433" in r.stdout and "free5434" in r.stdout
+
+
+def test_ephemeral_db_is_node_local_with_fsync_off(cluster):
+    _setup(cluster)
+    r = cluster.run("create_server.sh", "config.toml",
+                    **_db_env(cluster, ULTRACK_DB_EPHEMERAL="true", TMPDIR=cluster.root / "nodetmp"))
+    assert r.returncode == 0, r.stderr
+    (pg,) = cluster.calls("postgres")
+    assert f"-D {cluster.root}/nodetmp/postgresql_ultrack_t1" in pg
+    for flag in ["fsync=off", "synchronous_commit=off", "full_page_writes=off"]:
+        assert flag in pg
+
+
+def test_durable_db_is_the_default(cluster):
+    _setup(cluster)
+    cluster.run("create_server.sh", "config.toml", **_db_env(cluster))
+    (pg,) = cluster.calls("postgres")
+    assert "fsync=off" not in pg
+    assert f"-D {cluster.root}/work/postgresql_ultrack_t1" in pg
+
+
+def test_ephemeral_resume_is_refused(cluster):
+    _setup(cluster)
+    r = cluster.run("resume_server.sh", "config.toml", **_db_env(cluster, ULTRACK_DB_EPHEMERAL="true"))
+    assert r.returncode != 0
+    assert "no database to resume" in r.stderr
+    assert cluster.calls("postgres") == []
+
+
+def test_main_refuses_ephemeral_with_resume(cluster):
+    cluster.make_frames(6)
+    r = cluster.run("main.sh", BATCH_SIZE=6, BATCH="1", POST_PADDING="0",
+                    SKIP_SEG="true", ULTRACK_DB_EPHEMERAL="true")
+    assert r.returncode != 0
+    assert cluster.sbatch_calls() == []

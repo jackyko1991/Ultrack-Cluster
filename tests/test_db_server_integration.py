@@ -81,3 +81,26 @@ def test_real_server_lifecycle(tmp_path):
     finally:
         proc.send_signal(signal.SIGTERM)
         proc.wait(timeout=60)
+
+
+def test_real_ephemeral_server_runs_without_fsync(tmp_path):
+    workdir = tmp_path / "tracking"
+    shutil.copytree(REPO / "tracking", workdir)
+    ready = tmp_path / "ready"
+    env = {**os.environ, "ULTRACK_DB_PW": "pw", "JOB_NAME": "eph",
+           "ULTRACK_WORK_DIR": str(tmp_path / "work"), "ULTRACK_PG_MODULE": "",
+           "ULTRACK_DB_READY_FILE": str(ready), "ULTRACK_DB_EPHEMERAL": "true",
+           "TMPDIR": str(tmp_path / "nodetmp"),
+           "SLURM_MEM_PER_NODE": "1024", "SLURM_CPUS_PER_TASK": "1"}
+    env.pop("SLURM_JOB_NODELIST", None)
+    (tmp_path / "nodetmp").mkdir()
+    proc = _start(workdir, "create_server.sh", env)
+    try:
+        hp = _wait_ready(ready, proc)
+        r = _query(hp, "pw", "select current_setting('fsync'), current_setting('synchronous_commit')")
+        assert r.stdout.strip() == "off|off", r.stderr
+        assert (tmp_path / "nodetmp" / "postgresql_ultrack_eph" / "PG_VERSION").exists()
+        assert not (tmp_path / "work" / "postgresql_ultrack_eph").exists()
+    finally:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=60)
