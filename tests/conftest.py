@@ -28,7 +28,15 @@ echo $(( 1000 + n ))
 
 # Minimal dasel: `dasel -f FILE key.path` and `dasel put -t string -f FILE -v VALUE key.path`.
 DASEL_STUB = r"""#!/usr/bin/env python3
-import re, sys, tomllib
+import re, sys
+try:
+    import tomllib
+    def load(path):
+        return tomllib.load(open(path, "rb"))
+except ImportError:  # Python < 3.11 (e.g. the ultrack 0.4 image)
+    import toml
+    def load(path):
+        return toml.load(path)
 args = sys.argv[1:]
 with open(f"{__import__('os').environ['STUB_LOG_DIR']}/calls.log", "a") as log:
     log.write("dasel " + " ".join(args) + "\n")
@@ -41,7 +49,7 @@ if args[0] == "put":
     text = re.sub(rf"^{leaf}\s*=.*$", f"{leaf} = '{value}'", text, count=1, flags=re.M)
     open(path, "w").write(text)
 else:
-    data = tomllib.load(open(path, "rb"))
+    data = load(path)
     for part in key.split("."):
         data = data[part]
     print(data)
