@@ -17,3 +17,24 @@ ceil_div() {
 last_batch_index() {
     echo $(( $(ceil_div "$1" "$2") - 1 ))
 }
+
+# ultrack solves through python-mip, which uses Gurobi only if it can obtain a
+# license and otherwise silently falls back to the much slower CBC solver.
+# BMRC's Gurobi token-server license is a plain file; the retired
+# `Gurobi/10.0.1-GCCcore-12.2.0` module used to export it, nothing does now.
+# Sets GRB_LICENSE_FILE unless the caller already did; never fails the job
+# (CBC still works), but says so loudly.
+ULTRACK_GUROBI_LICENSE_DEFAULT="/gpfs3/apps/eb/licenses/gurobi.lic"
+setup_gurobi_license() {
+    if [[ -n "${GRB_LICENSE_FILE:-}" ]]; then
+        echo "Gurobi license: $GRB_LICENSE_FILE (preset)"
+        return 0
+    fi
+    local lic="${ULTRACK_GUROBI_LICENSE:-$ULTRACK_GUROBI_LICENSE_DEFAULT}"
+    if [[ -f "$lic" ]]; then
+        export GRB_LICENSE_FILE="$lic"
+        echo "Gurobi license: $GRB_LICENSE_FILE"
+    else
+        echo "WARNING: no Gurobi license at $lic (set ULTRACK_GUROBI_LICENSE); ultrack will fall back to the slower CBC solver" >&2
+    fi
+}
