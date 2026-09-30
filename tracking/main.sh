@@ -1,14 +1,16 @@
 #! /bin/bash
-source "$(dirname "${BASH_SOURCE[0]}")/find_dasel.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/ultrack_lib.sh"
 ################# FILE CONFIGURATIONS #################
-DATA_DIR="/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_03_Nyeso1_HCT116_framerate_10sec_flowrate_0p15mlperh/register_denoising_gamma_channel_merged_cropped/cancer_batch5"
+# Every setting below can be overridden from the environment, e.g.
+#   DATA_DIR=/path/to/labels BATCH_SIZE=40 bash main.sh
+DATA_DIR="${DATA_DIR:-/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_03_Nyeso1_HCT116_framerate_10sec_flowrate_0p15mlperh/register_denoising_gamma_channel_merged_cropped/cancer_batch5}"
 LABEL_PATH_PATTERN=$DATA_DIR/*.tif
 TIME_LENGTH=$(ls $DATA_DIR -1 | wc -l)
 
 # uncomment below to manual overide the number of time steps to process, default taking all time slices
-BATCH=3 # begin from 1
-BATCH_SIZE=2880
-POST_PADDING=20
+BATCH="${BATCH:-3}" # begin from 1
+BATCH_SIZE="${BATCH_SIZE:-2880}"
+POST_PADDING="${POST_PADDING:-20}"
 BEGIN_TIME=$((BATCH_SIZE*(BATCH-1))) # begin from 0
 END_TIME=$((BATCH_SIZE*BATCH-1+POST_PADDING))  # end at (max time steps - 1)
 if [[ $END_TIME -ge $TIME_LENGTH ]]; then
@@ -17,59 +19,37 @@ fi
 
 TIME_STEPS=$((END_TIME-BEGIN_TIME+1))
 
-export BINNING=1
-export JOB_NAME="20231003_roi-5_$((BEGIN_TIME))-$((END_TIME))_binT-$((BINNING))_tcell"
-MAX_JOBS=20 # DB concurrency limit
-CFG_FILE="config_binning_$BATCH.toml"
-export ULTRACK_DB_PW="ultrack_pw"
+export BINNING="${BINNING:-1}"
+export JOB_NAME="${JOB_NAME:-20231003_roi-5_$((BEGIN_TIME))-$((END_TIME))_binT-$((BINNING))_tcell}"
+MAX_JOBS="${MAX_JOBS:-20}" # DB concurrency limit
+CFG_FILE="${CFG_FILE:-config_binning_$BATCH.toml}"
+export ULTRACK_DB_PW="${ULTRACK_DB_PW:-ultrack_pw}"
 # export ULTRACK_DEBUG=1
-SKIP_SEG=true
-echo "Skip segmentation"
-
-SKIP_LINK=true
+SKIP_SEG="${SKIP_SEG:-true}"
+SKIP_LINK="${SKIP_LINK:-true}"
 # force skip segmentation if choose to skip link
 if $SKIP_LINK; then
     echo "Skip linking"
     SKIP_SEG=true
 fi
+if $SKIP_SEG; then
+    echo "Skip segmentation"
+fi
 # TODO: skip solve for direct export
 # SKIP_SOLVE=false
 
-################# BMRC CONFIGURATIONS ################# 
-LONG_PARTITION=long
-SHORT_PARTITION=short # short/long on BMRC
-DELAY_AFTER_DB_SERVER=3 # ultrack start time delay after database server creation, in minutes
+################# BMRC CONFIGURATIONS #################
+LONG_PARTITION="${LONG_PARTITION:-long}"
+SHORT_PARTITION="${SHORT_PARTITION:-short}" # short/long on BMRC
+DELAY_AFTER_DB_SERVER="${DELAY_AFTER_DB_SERVER:-3}" # ultrack start time delay after database server creation, in minutes
 
-################# ULTRACK VARIABLE AUTO SETTING ################# 
-# Helper function to calculate the ceiling of a number
-ceil() {
-    if [[ $1 =~ ^[0-9]*(\.[0-9]+)?$ ]]; then
-        integerPart=${1%.*}
-        fractionalPart=${1#*.}
-        
-        if [[ -z $fractionalPart ]]; then
-            echo $integerPart
-        else
-            if [[ $integerPart -ge 0 ]]; then
-                echo "$((integerPart + 1))"
-            else
-                echo "$integerPart"
-            fi
-        fi
-    else
-        echo "Error: Not a valid number"
-        return 1
-    fi
-}
-
+################# ULTRACK VARIABLE AUTO SETTING #################
 TIME_STEPS_BINNED=$((TIME_STEPS/BINNING))
 export DS_LENGTH=$((TIME_STEPS_BINNED-1)) # number of time points - 1
 export DASEL_BIN=$(resolve_dasel) || exit 1
 WINDOW_SIZE=$($DASEL_BIN -f $CFG_FILE "tracking.window_size")
-# NUM_WINDOWS=ceil($DS_LENGTH/window_size) - 1 , window_size should be exactly the one in config.toml
-NUM_WINDOWS=$(echo "scale=2;$DS_LENGTH / $WINDOW_SIZE" | bc)
-NUM_WINDOWS=$(ceil $NUM_WINDOWS)
-NUM_WINDOWS=$((NUM_WINDOWS-1))
+# last 0-based window index: ceil(DS_LENGTH / window_size) - 1
+NUM_WINDOWS=$(last_batch_index "$DS_LENGTH" "$WINDOW_SIZE")
 
 echo "Slices used from $DATA_DIR: $TIME_STEPS [$BEGIN_TIME:$END_TIME]"
 echo "Binning temporally in $BINNING times, resulting in $TIME_STEPS_BINNED steps"
