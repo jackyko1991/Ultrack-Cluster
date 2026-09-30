@@ -1,0 +1,40 @@
+Bootstrap: docker
+From: condaforge/miniforge3:24.3.0-0
+
+# Everything the Ultrack-Cluster jobs need in one image, so a run no longer
+# depends on site modules (PostgreSQL/Gurobi module names changed or vanished
+# on BMRC), a hand-installed dasel, or a conda env on the submitting shell.
+#
+# Build:  apptainer build --fakeroot ultrack-cluster.sif containers/ultrack-cluster.def
+# Use:    export ULTRACK_SIF=$PWD/ultrack-cluster.sif   (see README)
+#
+# Versions match the BMRC `ultrack` conda env that produced the 2026-09-30
+# smoke test (ultrack at royerlab/ultrack@5dc7839, Python 3.10, zarr 2.x).
+
+%labels
+    org.opencontainers.image.source https://github.com/jackyko1991/Ultrack-Cluster
+    org.opencontainers.image.description Ultrack-Cluster runtime (ultrack, PostgreSQL, dasel, gurobipy)
+
+%environment
+    export PATH=/opt/conda/bin:$PATH
+    export PYTHONNOUSERSITE=1
+
+%post
+    set -eux
+    mamba install -y -n base -c conda-forge python=3.10 postgresql=16 git curl
+    mamba clean -afy
+    pip install --no-cache-dir \
+        "ultrack @ git+https://github.com/royerlab/ultrack@5dc78396582803f635ad1899fc35a8c64313ba5c" \
+        numpy==1.24.4 zarr==2.16.1 pydantic==1.10.13 SQLAlchemy==1.4.50 \
+        mip==1.15.0 gurobipy==11.0.0 psycopg2-binary==2.9.9 \
+        dask==2023.12.0 dask-image==2023.8.1 scikit-image==0.21.0 tifffile==2023.12.9
+    curl -fsSL -o /usr/local/bin/dasel \
+        https://github.com/TomWright/dasel/releases/download/v2.8.1/dasel_linux_amd64
+    chmod +x /usr/local/bin/dasel
+
+%test
+    set -eux
+    python -c "import ultrack, gurobipy, mip, dask_image, psycopg2, zarr"
+    for tool in initdb pg_ctl postgres psql createdb pg_isready dasel ultrack; do
+        command -v "$tool"
+    done

@@ -38,3 +38,63 @@ setup_gurobi_license() {
         echo "WARNING: no Gurobi license at $lic (set ULTRACK_GUROBI_LICENSE); ultrack will fall back to the slower CBC solver" >&2
     fi
 }
+
+# Activate the environment ultrack runs in, explicitly and inside the job,
+# rather than relying on whatever the submitting shell happened to have
+# active (sbatch copies that environment, so a submission from a fresh shell
+# silently ran with no ultrack/python at all). First match wins:
+#   ULTRACK_SIF           -> nothing to activate; run_ultrack uses the image
+#   ULTRACK_ENV_ACTIVATE  -> file to source (e.g. a venv's bin/activate)
+#   ULTRACK_CONDA_ENV     -> conda env prefix (a directory) or name
+#   (none)                -> legacy: source ~/.bashrc; mamba activate cyto
+activate_ultrack_env() {
+    if [[ -n "${ULTRACK_SIF:-}" ]]; then
+        echo "Environment: container $ULTRACK_SIF"
+        return 0
+    fi
+    # rc files and activate scripts are rarely safe under `set -euo pipefail`.
+    # (Save flags from $-, not $(set +o): command substitution runs in a
+    # subshell that drops errexit, so that would silently disable set -e.)
+    local saved_flags=$-
+    set +eu
+    if [[ -n "${ULTRACK_ENV_ACTIVATE:-}" ]]; then
+        source "$ULTRACK_ENV_ACTIVATE"
+    elif [[ -n "${ULTRACK_CONDA_ENV:-}" && -d "$ULTRACK_CONDA_ENV" ]]; then
+        export CONDA_PREFIX="$ULTRACK_CONDA_ENV"
+        export PATH="$ULTRACK_CONDA_ENV/bin:$PATH"
+    elif [[ -n "${ULTRACK_CONDA_ENV:-}" ]]; then
+        source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate "$ULTRACK_CONDA_ENV"
+    else
+        [[ -f ~/.bashrc ]] && source ~/.bashrc
+        mamba activate cyto
+    fi
+    local rc=$?
+    if [[ $saved_flags == *u* ]]; then set -u; fi
+    if [[ $saved_flags == *e* ]]; then set -e; fi
+    if [[ $rc -ne 0 ]]; then
+        echo "ERROR: failed to activate the ultrack environment" >&2
+        return 1
+    fi
+    echo "Environment: python=$(command -v python || echo MISSING)"
+}
+
+# Run an ultrack/python command, inside ULTRACK_SIF when set. Bind mounts
+# default to the BMRC filesystems that exist on this node; override with
+# ULTRACK_SIF_ARGS.
+run_ultrack() {
+    if [[ -z "${ULTRACK_SIF:-}" ]]; then
+        "$@"
+        return
+    fi
+    local args
+    if [[ -n "${ULTRACK_SIF_ARGS+x}" ]]; then
+        read -r -a args <<< "$ULTRACK_SIF_ARGS"
+    else
+        args=()
+        local p
+        for p in /gpfs3 /well /users; do
+            [[ -d "$p" ]] && args+=(--bind "$p")
+        done
+    fi
+    apptainer exec "${args[@]}" "$ULTRACK_SIF" "$@"
+}

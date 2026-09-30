@@ -25,8 +25,7 @@ fi
 export ULTRACK_CLUSTER_DIR
 source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
-source ~/.bashrc
-mamba activate cyto
+activate_ultrack_env
 
 env | grep "^SLURM" | sort
 
@@ -46,5 +45,5 @@ else
 fi
 
 echo "Exporting Ultrack results...."
-ultrack export zarr-napari -cfg "$1" -o "$directory" -ow
+run_ultrack ultrack export zarr-napari -cfg "$1" -o "$directory" -ow
 echo "Exporting Ultrack results complete"

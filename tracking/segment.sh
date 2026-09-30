@@ -28,12 +28,11 @@ source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
 env | grep "^SLURM" | sort
 
-source ~/.bashrc
-mamba activate cyto
+activate_ultrack_env
 
 # ultrack segment $1 -cfg $CFG_FILE \
 #     -b $SLURM_ARRAY_TASK_ID -r napari-ome-zarr -el edge -dl detection
 
 # binning will automatically take care of length of data, for specfic time range edit in main.sh
 # reserver length for reference
-python "$ULTRACK_CLUSTER_DIR/segment.py" -p "$1" --cfg "$2" -b "$3" -e "$4" -bi $SLURM_ARRAY_TASK_ID -bp 3
+run_ultrack python "$ULTRACK_CLUSTER_DIR/segment.py" -p "$1" --cfg "$2" -b "$3" -e "$4" -bi $SLURM_ARRAY_TASK_ID -bp 3

@@ -22,12 +22,17 @@ Details are modified to fit the BMRC SLURM and infrastructure setup. It provides
 ### Gurobi License
 Ultrack solves linear programming with [Gurobi](https://www.gurobi.com/). For university clusters you may consult the administration team for the [Academic Site License](https://www.gurobi.com/features/academic-site-license/) installation.
 
-On BMRC Gruobi module need to be called before starting the code:
-```bash
-srun -p short --pty bash
-module load Gurobi/10.0.1-GCCcore-12.2.0
-<your Gurobi code>
-```
+ultrack reaches Gurobi through python-mip, which needs `GRB_LICENSE_FILE` and otherwise silently falls back to the much slower CBC solver. `solve.sh` sets it to BMRC's token-server license (`/gpfs3/apps/eb/licenses/gurobi.lic`) automatically; point it elsewhere with `ULTRACK_GUROBI_LICENSE=<file>`. (The old `module load Gurobi/10.0.1-GCCcore-12.2.0` no longer exists on BMRC.)
+
+### Runtime Environment
+Each job activates its environment itself, so nothing needs to be active in the shell that runs `main.sh`. Pick one (first match wins):
+
+| Variable | Effect |
+|---|---|
+| `ULTRACK_SIF=/path/ultrack-cluster.sif` | Run ultrack/python/PostgreSQL inside an Apptainer image built from [`containers/ultrack-cluster.def`](./containers/ultrack-cluster.def) (`apptainer build --fakeroot ultrack-cluster.sif containers/ultrack-cluster.def`). Bind mounts default to `/gpfs3`, `/well`, `/users`; override with `ULTRACK_SIF_ARGS`. |
+| `ULTRACK_ENV_ACTIVATE=/path/bin/activate` | Source this file (e.g. a venv). |
+| `ULTRACK_CONDA_ENV=<prefix or name>` | Activate this conda env (a prefix directory is just put first on `PATH`). |
+| *(none)* | Legacy behaviour: `source ~/.bashrc; mamba activate cyto`. |
 
 ### PostgreSQL Server Setup
 Most cluster environment may not come with all necessary tools for the PostgreSQL server setup in [create_server.sh](./tracking/create_server.sh). For an automated software installation (script dedicated to BMRC folder structure but you may modify to fit your system's installation environment), edit `$INSTALL_DIR` in `install_server_dependency.sh` then run:

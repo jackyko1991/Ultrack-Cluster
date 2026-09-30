@@ -27,9 +27,6 @@ source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
 env | grep "^SLURM" | sort
 
-# module load anaconda/2022.05
-# conda activate dexpv2
-source ~/.bashrc
-mamba activate cyto
+activate_ultrack_env
 
-ultrack link -cfg "$1" -b $SLURM_ARRAY_TASK_ID
+run_ultrack ultrack link -cfg "$1" -b $SLURM_ARRAY_TASK_ID
