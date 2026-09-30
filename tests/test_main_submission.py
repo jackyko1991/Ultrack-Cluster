@@ -47,3 +47,37 @@ def test_config_is_overridable_from_environment(cluster):
     names = [opt(a, "--job-name") for a in cluster.sbatch_calls()]
     assert "DATABASE_my_job" in names
     assert "SEGMENT_my_job" in names
+
+
+def test_main_runs_from_any_directory(cluster):
+    # pyCyto drives main.sh from a per-run directory, not tracking/
+    import subprocess
+    cluster.make_frames(26)
+    run_dir = cluster.root / "run1"
+    run_dir.mkdir()
+    r = subprocess.run(["bash", str(cluster.workdir / "main.sh")], cwd=run_dir, capture_output=True, text=True,
+                       env=cluster.env(BATCH_SIZE=26, CFG_FILE=cluster.workdir / "config.toml", JOB_NAME="j", **FULL_RUN))
+    assert r.returncode == 0, r.stderr
+    scripts = [next(a for a in c if a.endswith(".sh")) for c in cluster.sbatch_calls()]
+    assert all(s.startswith(str(cluster.workdir) + "/") for s in scripts), scripts
+    export = next(c for c in cluster.sbatch_calls() if script_of(c) == "export.sh")
+    assert export[-1] == f"{run_dir}/results/j"                     # stable results location
+    assert (run_dir / "slurm_output" / "j" / "submission.tsv").exists()
+
+
+def test_begin_end_time_override_batch_settings(cluster):
+    cluster.make_frames(40)
+    r = cluster.run("main.sh", BEGIN_TIME=10, END_TIME=29, BATCH="3", BATCH_SIZE=5,
+                    POST_PADDING="0", SKIP_SEG="false", SKIP_LINK="false", JOB_NAME="j")
+    assert r.returncode == 0, r.stderr
+    seg = next(c for c in cluster.sbatch_calls() if script_of(c) == "segment.sh")
+    assert seg[-2:] == ["10", "29"]
+    assert "20 [10:29]" in r.stdout + r.stderr
+
+
+def test_end_time_is_clamped_to_the_last_frame(cluster):
+    cluster.make_frames(12)
+    r = cluster.run("main.sh", BEGIN_TIME=0, END_TIME=500, SKIP_SEG="false", SKIP_LINK="false", JOB_NAME="j")
+    assert r.returncode == 0, r.stderr
+    seg = next(c for c in cluster.sbatch_calls() if script_of(c) == "segment.sh")
+    assert seg[-1] == "11"

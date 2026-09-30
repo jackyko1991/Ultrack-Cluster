@@ -18,8 +18,9 @@ TIME_LENGTH=$(python3 "$ULTRACK_LIB_DIR/label_io.py" frames "$LABEL_PATH_PATTERN
 BATCH="${BATCH:-3}" # begin from 1
 BATCH_SIZE="${BATCH_SIZE:-2880}"
 POST_PADDING="${POST_PADDING:-20}"
-BEGIN_TIME=$((BATCH_SIZE*(BATCH-1))) # begin from 0
-END_TIME=$((BATCH_SIZE*BATCH-1+POST_PADDING))  # end at (max time steps - 1)
+# BEGIN_TIME/END_TIME (0-based, inclusive) take precedence over BATCH/BATCH_SIZE/POST_PADDING
+BEGIN_TIME="${BEGIN_TIME:-$((BATCH_SIZE*(BATCH-1)))}" # begin from 0
+END_TIME="${END_TIME:-$((BATCH_SIZE*BATCH-1+POST_PADDING))}"  # end at (max time steps - 1)
 if [[ $END_TIME -ge $TIME_LENGTH ]]; then
     END_TIME=$((TIME_LENGTH-1))
 fi
@@ -128,6 +129,9 @@ for workers in "$SEG_WORKERS" "$LINK_WORKERS"; do
 done
 
 export ULTRACK_STAGE=main
+# results/<job>/tracks.csv under the directory main.sh is run from (a stable
+# location callers such as pyCyto read)
+RESULTS_DIR="$PWD/results/$JOB_NAME"
 LOG_DIR="$PWD/slurm_output/$JOB_NAME"
 log INFO "slices from $LABEL_PATH_PATTERN: $TIME_STEPS [$BEGIN_TIME:$END_TIME], binning $BINNING -> $TIME_STEPS_BINNED steps"
 log INFO "window size $WINDOW_SIZE -> last window index $NUM_WINDOWS"
@@ -172,17 +176,17 @@ submit() {
 if $SKIP_SEG; then
     SERVER_JOB_ID=$(submit db-server --partition "$LONG_PARTITION" --job-name "DATABASE_$JOB_NAME" \
         --mem "$DB_MEM" --cpus-per-task "$DB_CPUS" --time "$DB_TIME" \
-        --output "$LOG_DIR/database-%j.out" resume_server.sh "$CFG_FILE")
+        --output "$LOG_DIR/database-%j.out" "$ULTRACK_CLUSTER_DIR/resume_server.sh" "$CFG_FILE")
     SEGM_JOB_ID=$SERVER_JOB_ID
 else
     SERVER_JOB_ID=$(submit db-server --partition "$LONG_PARTITION" --job-name "DATABASE_$JOB_NAME" \
         --mem "$DB_MEM" --cpus-per-task "$DB_CPUS" --time "$DB_TIME" \
-        --output "$LOG_DIR/database-%j.out" create_server.sh "$CFG_FILE")
+        --output "$LOG_DIR/database-%j.out" "$ULTRACK_CLUSTER_DIR/create_server.sh" "$CFG_FILE")
     seg_args=(--partition "$SEG_PARTITION" --job-name "SEGMENT_$JOB_NAME" \
         --output "$LOG_DIR/segment/segment-%A_%a.out" --cpus-per-task="$SEG_WORKERS" \
         ${SEG_GPU_ARGS[@]+"${SEG_GPU_ARGS[@]}"} \
         --mem "$(( SEG_MEM_GB_PER_WORKER * SEG_WORKERS ))G" --time "$SEG_TIME" --kill-on-invalid-dep=yes)
-    seg_cmd=(segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
+    seg_cmd=("$ULTRACK_CLUSTER_DIR/segment.sh" "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
     # Batch 0 creates the tables (and clears any old data), so it runs alone
     # first: the other batches start only once it has succeeded, and a late or
     # requeued batch 0 can no longer wipe segments they already inserted.
@@ -212,7 +216,7 @@ else
     LINK_JOB_ID=$(submit link --partition "$SHORT_PARTITION" --job-name "LINK_$JOB_NAME" \
         --output "$LOG_DIR/link/link-%A_%a.out" --array="0-$LINK_LAST%$MAX_JOBS" --cpus-per-task="$LINK_WORKERS" \
         --mem "$(( LINK_MEM_GB_PER_WORKER * LINK_WORKERS ))G" --time "$LINK_TIME" \
-        -d "$link_dep" --kill-on-invalid-dep=yes link.sh "$CFG_FILE")
+        -d "$link_dep" --kill-on-invalid-dep=yes "$ULTRACK_CLUSTER_DIR/link.sh" "$CFG_FILE")
 fi
 
 # NUM_WINDOWS is the LAST window's 0-based index. Windows are solved in two
@@ -227,11 +231,11 @@ MAX_SOLVE_JOBS="${MAX_SOLVE_JOBS:-}"   # optional throttle on the even pass
 throttle="${MAX_SOLVE_JOBS:+%$MAX_SOLVE_JOBS}"
 if [[ $NUM_WINDOWS -eq 0 ]]; then
     SOLVE_JOB_ID_0=$(submit solve "${solve_res[@]}" --array=0-0 \
-        -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+        -d "$solve_dep" --kill-on-invalid-dep=yes "$ULTRACK_CLUSTER_DIR/solve.sh" "$CFG_FILE")
     export_dep="afterok:$SOLVE_JOB_ID_0"
 else
     SOLVE_JOB_ID_0=$(submit solve-even "${solve_res[@]}" --array="0-$NUM_WINDOWS:2$throttle" \
-        -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+        -d "$solve_dep" --kill-on-invalid-dep=yes "$ULTRACK_CLUSTER_DIR/solve.sh" "$CFG_FILE")
     if ${SOLVE_PER_WINDOW_DEPS:-true}; then
         # Each odd window waits only for its two even neighbours, so it can
         # start while other even windows are still queued or running.
@@ -242,19 +246,19 @@ else
                 window_dep+=":${SOLVE_JOB_ID_0}_$((w + 1))"
             fi
             odd_id=$(submit "solve-odd-$w" "${solve_res[@]}" --array="$w-$w" \
-                -d "$window_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+                -d "$window_dep" --kill-on-invalid-dep=yes "$ULTRACK_CLUSTER_DIR/solve.sh" "$CFG_FILE")
             export_dep+=":$odd_id"
         done
     else
         SOLVE_JOB_ID_1=$(submit solve-odd "${solve_res[@]}" --array="1-$NUM_WINDOWS:2" \
-            -d "afterok:$SOLVE_JOB_ID_0" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+            -d "afterok:$SOLVE_JOB_ID_0" --kill-on-invalid-dep=yes "$ULTRACK_CLUSTER_DIR/solve.sh" "$CFG_FILE")
         export_dep="afterok:$SOLVE_JOB_ID_0:$SOLVE_JOB_ID_1"
     fi
 fi
 
 EXPORT_JOB_ID=$(submit export --partition "$SHORT_PARTITION" --job-name "EXPORT_$JOB_NAME" --output "$LOG_DIR/export-%j.out" \
     --mem "$EXPORT_MEM" --time "$EXPORT_TIME" \
-    -d "$export_dep" --kill-on-invalid-dep=yes export.sh "$CFG_FILE")
+    -d "$export_dep" --kill-on-invalid-dep=yes "$ULTRACK_CLUSTER_DIR/export.sh" "$CFG_FILE" "$RESULTS_DIR")
 
 # Stop the DB server once export ends in any state (upstream failures cancel
 # the chain via --kill-on-invalid-dep, so export always ends) and record what
@@ -262,7 +266,7 @@ EXPORT_JOB_ID=$(submit export --partition "$SHORT_PARTITION" --job-name "EXPORT_
 if ! ${KEEP_DB:-false}; then
     CLEANUP_JOB_ID=$(submit cleanup --partition "$SHORT_PARTITION" --job-name "CLEANUP_$JOB_NAME" \
         --output "$LOG_DIR/cleanup-%j.out" -d "afterany:$EXPORT_JOB_ID" \
-        cleanup.sh "$SERVER_JOB_ID" "$MANIFEST")
+        "$ULTRACK_CLUSTER_DIR/cleanup.sh" "$SERVER_JOB_ID" "$MANIFEST")
 else
     log WARN "KEEP_DB=true: DB server job $SERVER_JOB_ID keeps running until you scancel it"
 fi

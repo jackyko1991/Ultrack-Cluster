@@ -168,7 +168,7 @@ def script_of(argv: list[str]) -> str:
     """The batch script (first *.sh argument) of an sbatch call, or '--wrap'."""
     if "--wrap" in argv or any(a.startswith("--wrap=") for a in argv):
         return "--wrap"
-    return next(a for a in argv if a.endswith(".sh"))
+    return os.path.basename(next(a for a in argv if a.endswith(".sh")))
 
 
 @pytest.fixture
