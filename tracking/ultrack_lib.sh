@@ -106,6 +106,23 @@ setup_gurobi_license() {
 #   ULTRACK_ENV_ACTIVATE  -> file to source (e.g. a venv's bin/activate)
 #   ULTRACK_CONDA_ENV     -> conda env prefix (a directory) or name
 #   (none)                -> legacy: source ~/.bashrc; mamba activate cyto
+# First pixi that runs on this node: ULTRACK_PIXI_BIN, then each pixi on PATH,
+# then $PIXI_HOME/bin and ~/.pixi/bin (the installer's default, often only on
+# PATH in interactive shells). A PATH can hold a pixi for another CPU
+# architecture (e.g. ~/.pixi-aarch64/bin for ARM nodes) that sbatch then
+# exports to x86 jobs, so "found" is not enough: it must execute.
+resolve_pixi() {
+    local p
+    for p in ${ULTRACK_PIXI_BIN:+"$ULTRACK_PIXI_BIN"} $(type -ap pixi 2>/dev/null) \
+             "${PIXI_HOME:-$HOME/.pixi}/bin/pixi" "$HOME/.pixi/bin/pixi"; do
+        if [[ -x "$p" ]] && "$p" --version >/dev/null 2>&1; then
+            echo "$p"
+            return 0
+        fi
+    done
+    return 1
+}
+
 activate_ultrack_env() {
     if [[ -n "${ULTRACK_SIF:-}" ]]; then
         log INFO "environment: container $ULTRACK_SIF"
@@ -122,10 +139,8 @@ activate_ultrack_env() {
     elif [[ -n "${ULTRACK_PIXI_ENV:-}" ]]; then
         # an environment of this repo's pixi.toml (default = CPU, gpu = CUDA)
         local hook
-        # pixi's installer puts it in ~/.pixi/bin, often only on PATH in
-        # interactive shells
         local pixi_bin
-        pixi_bin=$(command -v pixi || echo "${PIXI_HOME:-$HOME/.pixi}/bin/pixi")
+        pixi_bin=$(resolve_pixi) || pixi_bin=pixi
         hook=$("$pixi_bin" shell-hook -e "$ULTRACK_PIXI_ENV" \
             --manifest-path "${ULTRACK_PIXI_MANIFEST:-$ULTRACK_LIB_DIR/../pixi.toml}") && eval "$hook"
     elif [[ -n "${ULTRACK_CONDA_ENV:-}" && -d "$ULTRACK_CONDA_ENV" ]]; then

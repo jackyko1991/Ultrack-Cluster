@@ -67,7 +67,7 @@ def test_pixi_env_is_activated_from_repo_manifest(cluster):
     r = cluster.bash('activate_ultrack_env && echo "m=$MARKER"', ULTRACK_PIXI_ENV="gpu")
     assert r.returncode == 0, r.stderr
     assert "m=pixi-gpu" in r.stdout
-    call = cluster.calls("pixi")[0]
+    call = next(c for c in cluster.calls("pixi") if c.startswith("pixi shell-hook"))
     assert call.startswith("pixi shell-hook -e gpu --manifest-path ") and call.endswith("/pixi.toml")
 
 
@@ -91,3 +91,28 @@ def test_pixi_found_in_default_install_dir_when_not_on_path(cluster, tmp_path):
                      PATH=f"{cluster.bindir}:/usr/bin:/bin")      # no pixi on PATH
     assert r.returncode == 0, r.stderr
     assert "m=found-default" in r.stdout
+
+
+def test_pixi_for_another_architecture_on_path_is_skipped(cluster, tmp_path):
+    # ~/.pixi-aarch64/bin first on PATH (BMRC login shells): found, but cannot run on x86
+    bad = tmp_path / "pixi-aarch64" / "pixi"
+    bad.parent.mkdir()
+    bad.write_text("#!/bin/bash\nexit 126\n")
+    bad.chmod(0o755)
+    good = tmp_path / "home-pixi" / "bin" / "pixi"
+    good.parent.mkdir(parents=True)
+    good.write_text('#!/bin/bash\n[[ $1 == --version ]] && { echo pixi 0.71; exit 0; }\necho "export MARKER=good-$3"\n')
+    good.chmod(0o755)
+    # PATH = the ARM pixi + system tools only (no host pixi to fall back on)
+    r = cluster.bash(f'PATH="{bad.parent}:{cluster.bindir}:/usr/bin:/bin"; activate_ultrack_env && echo "m=$MARKER"',
+                     ULTRACK_PIXI_ENV="default", PIXI_HOME=good.parent.parent)
+    assert r.returncode == 0, r.stderr
+    assert "m=good-default" in r.stdout
+
+
+def test_ultrack_pixi_bin_overrides_path(cluster, tmp_path):
+    good = tmp_path / "pixi"
+    good.write_text('#!/bin/bash\n[[ $1 == --version ]] && exit 0\necho "export MARKER=explicit"\n')
+    good.chmod(0o755)
+    r = cluster.bash('activate_ultrack_env && echo "m=$MARKER"', ULTRACK_PIXI_ENV="default", ULTRACK_PIXI_BIN=good)
+    assert "m=explicit" in r.stdout
