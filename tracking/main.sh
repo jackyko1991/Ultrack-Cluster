@@ -82,7 +82,8 @@ EXPORT_MEM="${EXPORT_MEM:-32G}"
 EXPORT_TIME="${EXPORT_TIME:-1-00:00:00}"
 
 ################# ULTRACK VARIABLE AUTO SETTING #################
-TIME_STEPS_BINNED=$((TIME_STEPS/BINNING))
+# frames begin..end taking every BINNING-th: ceil, as segment.py slices [begin:end+1:BINNING]
+TIME_STEPS_BINNED=$(ceil_div "$TIME_STEPS" "$BINNING")
 if (( TIME_STEPS_BINNED < 2 )); then
     log ERROR "need at least 2 time points to track, got $TIME_STEPS_BINNED from $LABEL_PATH_PATTERN [$BEGIN_TIME:$END_TIME]"
     exit 1

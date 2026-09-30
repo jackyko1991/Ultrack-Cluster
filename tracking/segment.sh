@@ -38,6 +38,5 @@ wait_for_db || exit 1
 # ultrack segment $1 -cfg $CFG_FILE \
 #     -b $SLURM_ARRAY_TASK_ID -r napari-ome-zarr -el edge -dl detection
 
-# binning will automatically take care of length of data, for specfic time range edit in main.sh
-# reserver length for reference
-run_ultrack python "$ULTRACK_CLUSTER_DIR/segment.py" -p "$1" --cfg "$2" -b "$3" -e "$4" -bi "${SLURM_ARRAY_TASK_ID:?must run as a SLURM array task (sbatch --array)}" -bp 3
+# -s: temporal binning (every BINNING-th frame), the step main.sh sized the arrays with
+run_ultrack python "$ULTRACK_CLUSTER_DIR/segment.py" -p "$1" --cfg "$2" -b "$3" -e "$4" -bi "${SLURM_ARRAY_TASK_ID:?must run as a SLURM array task (sbatch --array)}" -bp 3 -s "${BINNING:-1}"

@@ -53,3 +53,26 @@ def test_connection_budget_warning(cluster):
     r = cluster.run("main.sh", BATCH_SIZE=26, MAX_JOBS=20, **FULL)
     assert r.returncode == 0
     assert "may exceed max_connections" in r.stderr
+
+
+@pytest.mark.parametrize("frames,binning", [(12, 2), (13, 2), (91, 3), (6, 1)])
+def test_binning_reaches_segment_and_matches_array_sizes(cluster, frames, binning):
+    # segment.py reads frames[begin:end+1:binning]; the arrays must be sized
+    # for exactly that many steps, and segment.sh must pass the step on
+    cluster.make_frames(frames)
+    r = cluster.run("main.sh", BATCH_SIZE=frames, BINNING=binning, **FULL)
+    assert r.returncode == 0, r.stderr
+    steps = len(range(0, frames, binning))
+    segs = [c for c in cluster.sbatch_calls() if script_of(c) == "segment.sh"]
+    covered = sum(_array(c)[1] - _array(c)[0] + 1 for c in segs)      # n_workers = 1
+    assert covered == steps
+    link = next(c for c in cluster.sbatch_calls() if script_of(c) == "link.sh")
+    assert _array(link) == (0, steps - 2)
+
+
+def test_segment_job_passes_binning_to_segment_py(cluster):
+    r = cluster.run_as_slurm_job("segment.sh", "labels/*.tif", "config.toml", "0", "11",
+                                 SLURM_SUBMIT_DIR=cluster.workdir, SLURM_ARRAY_TASK_ID=0, BINNING=3)
+    assert r.returncode == 0, r.stderr
+    (call,) = cluster.calls("python")
+    assert call.split()[-2:] == ["-s", "3"]
