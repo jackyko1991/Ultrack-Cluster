@@ -27,6 +27,7 @@ source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
 env | grep "^SLURM" | sort
 
-activate_ultrack_env
+activate_ultrack_env || exit 1
+wait_for_db || exit 1
 
 run_ultrack ultrack link -cfg "$1" -b $SLURM_ARRAY_TASK_ID

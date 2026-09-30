@@ -28,7 +28,8 @@ source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
 env | grep "^SLURM" | sort
 
-activate_ultrack_env
+activate_ultrack_env || exit 1
+wait_for_db || exit 1
 
 # ultrack segment $1 -cfg $CFG_FILE \
 #     -b $SLURM_ARRAY_TASK_ID -r napari-ome-zarr -el edge -dl detection

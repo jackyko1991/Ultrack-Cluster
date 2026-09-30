@@ -25,7 +25,8 @@ fi
 export ULTRACK_CLUSTER_DIR
 source "$ULTRACK_CLUSTER_DIR/ultrack_lib.sh"
 
-activate_ultrack_env
+activate_ultrack_env || exit 1
+wait_for_db || exit 1
 
 env | grep "^SLURM" | sort
 

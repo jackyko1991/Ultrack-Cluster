@@ -266,3 +266,24 @@ run_db_server() {
     echo "Ultrack DB service ready at $host:$port"
     wait "$ULTRACK_PG_PID"
 }
+
+# Workers: block until the DB server has published "host:port" in
+# $ULTRACK_DB_READY_FILE (it only does so once PostgreSQL accepts
+# connections) and that port answers. Replaces main.sh's fixed
+# `--dependency=after:<server>+N` minutes guess, which raced whenever the
+# server queued or started slowly. No-op when no ready file is configured.
+wait_for_db() {
+    [[ -z "${ULTRACK_DB_READY_FILE:-}" ]] && return 0
+    local timeout="${ULTRACK_DB_WAIT_TIMEOUT:-1800}" poll="${ULTRACK_DB_POLL_INTERVAL:-5}"
+    local start=$SECONDS host_port
+    until [[ -s "$ULTRACK_DB_READY_FILE" ]] &&
+          host_port=$(<"$ULTRACK_DB_READY_FILE") &&
+          (exec 3<>"/dev/tcp/${host_port%:*}/${host_port##*:}") 2>/dev/null; do
+        if (( SECONDS - start >= timeout )); then
+            echo "ERROR: DB not reachable after ${timeout}s (ready file: $ULTRACK_DB_READY_FILE)" >&2
+            return 1
+        fi
+        sleep "$poll"
+    done
+    echo "DB reachable at $host_port after $(( SECONDS - start ))s"
+}
