@@ -192,3 +192,21 @@ def test_main_refuses_ephemeral_with_resume(cluster):
                     SKIP_SEG="true", ULTRACK_DB_EPHEMERAL="true")
     assert r.returncode != 0
     assert cluster.sbatch_calls() == []
+
+
+def test_db_server_uses_postgres_from_configured_runtime(cluster, tmp_path):
+    # e.g. the pixi env with ULTRACK_PG_MODULE="": postgres is only on PATH
+    # after activation, and no module is loaded
+    env_dir = tmp_path / "env"
+    (env_dir / "bin").mkdir(parents=True)
+    for tool in ["postgres", "initdb"]:
+        p = env_dir / "bin" / tool
+        p.write_text(f'#!/bin/bash\necho "env-{tool} $*" >> "$STUB_LOG_DIR/calls.log"\nsleep 0.3\n')
+        p.chmod(0o755)
+    _setup(cluster)
+    (cluster.bindir / "postgres").unlink()    # not on the base PATH
+    r = cluster.run("create_server.sh", "config.toml",
+                    **_db_env(cluster, ULTRACK_CONDA_ENV=env_dir, ULTRACK_PG_MODULE=""))
+    assert r.returncode == 0, r.stderr
+    assert cluster.calls("module") == []
+    assert len(cluster.calls("env-postgres")) == 1 and len(cluster.calls("env-initdb")) == 1

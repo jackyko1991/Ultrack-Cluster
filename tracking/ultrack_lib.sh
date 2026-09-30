@@ -122,7 +122,11 @@ activate_ultrack_env() {
     elif [[ -n "${ULTRACK_PIXI_ENV:-}" ]]; then
         # an environment of this repo's pixi.toml (default = CPU, gpu = CUDA)
         local hook
-        hook=$(pixi shell-hook -e "$ULTRACK_PIXI_ENV" \
+        # pixi's installer puts it in ~/.pixi/bin, often only on PATH in
+        # interactive shells
+        local pixi_bin
+        pixi_bin=$(command -v pixi || echo "${PIXI_HOME:-$HOME/.pixi}/bin/pixi")
+        hook=$("$pixi_bin" shell-hook -e "$ULTRACK_PIXI_ENV" \
             --manifest-path "${ULTRACK_PIXI_MANIFEST:-$ULTRACK_LIB_DIR/../pixi.toml}") && eval "$hook"
     elif [[ -n "${ULTRACK_CONDA_ENV:-}" && -d "$ULTRACK_CONDA_ENV" ]]; then
         export CONDA_PREFIX="$ULTRACK_CONDA_ENV"
@@ -320,6 +324,12 @@ run_db_server() {
     local db_name="ultrack"
     local host="${SLURM_JOB_NODELIST:-$(hostname)}"
 
+    # PostgreSQL may come from the job runtime (e.g. the pixi env, with
+    # ULTRACK_PG_MODULE=""), so activate it when one is configured explicitly;
+    # the legacy bashrc/mamba default is not forced on the DB server.
+    if [[ -n "${ULTRACK_PIXI_ENV:-}${ULTRACK_CONDA_ENV:-}${ULTRACK_ENV_ACTIVATE:-}" ]]; then
+        activate_ultrack_env || return 1
+    fi
     load_postgres || return 1
     mkdir -p "$socket_dir"
     rm -f "$socket_dir"/.s.PGSQL.*

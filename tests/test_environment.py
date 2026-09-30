@@ -79,3 +79,15 @@ def test_container_gets_nv_only_on_gpu_allocations(cluster):
         "apptainer exec --bind /data /imgs/u.sif python segment.py",
         "apptainer exec --nv --bind /data /imgs/u.sif python segment.py",
     ]
+
+
+def test_pixi_found_in_default_install_dir_when_not_on_path(cluster, tmp_path):
+    home = tmp_path / "h"
+    (home / ".pixi" / "bin").mkdir(parents=True)
+    pixi = home / ".pixi" / "bin" / "pixi"
+    pixi.write_text('#!/bin/bash\necho "export MARKER=found-$3"\n')
+    pixi.chmod(0o755)
+    r = cluster.bash('activate_ultrack_env && echo "m=$MARKER"', ULTRACK_PIXI_ENV="default", HOME=home,
+                     PATH=f"{cluster.bindir}:/usr/bin:/bin")      # no pixi on PATH
+    assert r.returncode == 0, r.stderr
+    assert "m=found-default" in r.stdout
