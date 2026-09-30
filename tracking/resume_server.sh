@@ -12,6 +12,13 @@
 
 env | grep "^SLURM" | sort
 
+# Bug fix: this was never assigned, so the `dasel put ... -f $CFG_FILE`
+# call below silently wrote to a file named "" (dasel's own missing-file
+# error, or worse, a stray empty-named file in the cwd) instead of the
+# config main.sh actually passed in as $1 -- matching create_server.sh's
+# own `CFG_FILE=$1` line, which resume_server.sh was missing.
+CFG_FILE=$1
+
 module load PostgreSQL/15.2-GCCcore-12.2.0
 
 # DB_DIR="/hpc/mydata/$USER/postgresql_ultrack"
@@ -28,8 +35,10 @@ DB_ADDR="$USER:$ULTRACK_DB_PW@$SLURM_JOB_NODELIST:5432/ultrack?gssencmode=disabl
 # update config file
 echo ""
 echo "Server running on uri $DB_ADDR"
-dasel put -t string -f $CFG_FILE -v $DB_ADDR "data.address" 
+dasel put -t string -f $CFG_FILE -v $DB_ADDR "data.address"
 # dasel put string -f $CFG_FILE "data.address" $DB_ADDR
+# See create_server.sh's identical line for why this chmod is here.
+chmod 600 "$CFG_FILE"
 echo "Updated $CFG_FILE"
 
 # configuration tuned using https://pgtune.leopard.in.ua/
