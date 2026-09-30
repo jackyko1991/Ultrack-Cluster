@@ -62,7 +62,7 @@ echo "$(basename "$0") $*" >> "$STUB_LOG_DIR/calls.log"
 
 GENERIC_TOOLS = [
     "scancel", "sacct", "squeue", "module", "initdb", "pg_ctl", "createdb",
-    "psql", "postgres", "lsof", "ultrack", "python", "apptainer", "mamba",
+    "psql", "postgres", "ultrack", "python", "apptainer", "mamba",
 ]
 
 
@@ -82,6 +82,9 @@ class Cluster:
         self.stub("dasel", DASEL_STUB)
         self.stub("getent", "#!/bin/bash\necho 'testgroup:x:1000:'\n")
         self.stub("pg_isready", GENERIC_STUB)
+        # nothing listening, unless a test says otherwise (hosts without `ss`
+        # fall back to lsof, whose exit 0 means "port in use")
+        self.stub("lsof", "#!/bin/bash\nexit 1\n")
         for tool in GENERIC_TOOLS:
             self.stub(tool, GENERIC_STUB)
 

@@ -145,3 +145,15 @@ exec "$@"
     assert cluster.calls("module") == []
     tools = {c.split()[3] for c in cluster.calls("apptainer")}
     assert {"initdb", "postgres", "pg_isready", "createdb", "psql"} <= tools
+
+
+def test_port_check_falls_back_to_lsof_without_ss(cluster):
+    # no `ss` on PATH: hide the host's by pointing PATH at the stub dir + coreutils only
+    cluster.stub("lsof", '#!/bin/bash\n[[ "$*" == *":5433 "* ]] && exit 0; exit 1\n')
+    r = cluster.bash('PATH="$STUB_BIN:/bin:/usr/bin"; command -v ss >/dev/null && echo HAS_SS; '
+                     'is_port_in_use 5433 && echo busy5433; is_port_in_use 5434 || echo free5434',
+                     STUB_BIN=cluster.bindir)
+    if "HAS_SS" in r.stdout:
+        import pytest
+        pytest.skip("ss is in /bin or /usr/bin here; fallback not reachable")
+    assert "busy5433" in r.stdout and "free5434" in r.stdout

@@ -35,6 +35,8 @@ ultrack_cluster_version() {
 
 _ultrack_on_err() {
     [[ -n "${_ULTRACK_QUIET_ERR:-}" ]] && return 0
+    # `return N` from our own functions: they already logged why
+    [[ "$3" == return* ]] && return 0
     log ERROR "command failed (exit $1) at line $2: $3"
 }
 

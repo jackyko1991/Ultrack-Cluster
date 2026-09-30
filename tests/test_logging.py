@@ -84,3 +84,10 @@ def test_main_writes_a_submission_manifest(cluster):
     # submit() must print only the job id on stdout, or dependencies break
     deps = [row[2] for row in rows]
     assert "after:1001" in deps[1] and "afterok:1003" in deps[3]
+
+
+def test_no_useless_error_line_for_function_returns(cluster):
+    r = cluster.bash("set -euo pipefail; start_stage t; f() { log ERROR 'real reason'; return 1; }; f")
+    errors = [m.group(5) for m in _lines(r.stderr) if m.group(1).strip() == "ERROR"]
+    assert errors[0] == "real reason"
+    assert not any("return 1" in e for e in errors)
