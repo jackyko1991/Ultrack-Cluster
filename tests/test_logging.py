@@ -79,7 +79,7 @@ def test_main_writes_a_submission_manifest(cluster):
     assert manifest[0].startswith("# submitted") and "repo=" in manifest[0]
     assert "window_size=20" in manifest[1]
     rows = [l.split("\t") for l in manifest[3:]]
-    assert [r[0] for r in rows] == ["db-server", "segment", "link", "solve-even", "solve-odd", "export", "cleanup"]
+    assert [r[0] for r in rows] == ["db-server", "segment", "link", "solve-even", "solve-odd-1", "export", "cleanup"]
     assert [r[1] for r in rows] == [str(1001 + i) for i in range(len(rows))]
     # submit() must print only the job id on stdout, or dependencies break
     deps = [row[2] for row in rows]

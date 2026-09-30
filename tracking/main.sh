@@ -185,22 +185,41 @@ fi
 # even neighbours. With a single window (NUM_WINDOWS == 0) there is no odd
 # pass (--array=1-0:2 would be invalid).
 if $SKIP_LINK; then solve_dep="after:$LINK_JOB_ID"; else solve_dep="afterok:$LINK_JOB_ID"; fi
+solve_res=(--partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
+    --mem "$SOLVE_MEM" --cpus-per-task "$SOLVE_CPUS" --time "$SOLVE_TIME" \
+    --output "$LOG_DIR/solve/solve-%A_%a.out")
+MAX_SOLVE_JOBS="${MAX_SOLVE_JOBS:-}"   # optional throttle on the even pass
+throttle="${MAX_SOLVE_JOBS:+%$MAX_SOLVE_JOBS}"
 if [[ $NUM_WINDOWS -eq 0 ]]; then
-    SOLVE_JOB_ID_1=$(submit solve --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
-        --mem "$SOLVE_MEM" --cpus-per-task "$SOLVE_CPUS" --time "$SOLVE_TIME" \
-        --output "$LOG_DIR/solve/solve-%A_%a.out" --array=0-0 -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+    SOLVE_JOB_ID_0=$(submit solve "${solve_res[@]}" --array=0-0 \
+        -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+    export_dep="afterok:$SOLVE_JOB_ID_0"
 else
-    SOLVE_JOB_ID_0=$(submit solve-even --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
-        --mem "$SOLVE_MEM" --cpus-per-task "$SOLVE_CPUS" --time "$SOLVE_TIME" \
-        --output "$LOG_DIR/solve/solve-%A_%a.out" --array="0-$NUM_WINDOWS:2" -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
-    SOLVE_JOB_ID_1=$(submit solve-odd --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
-        --mem "$SOLVE_MEM" --cpus-per-task "$SOLVE_CPUS" --time "$SOLVE_TIME" \
-        --output "$LOG_DIR/solve/solve-%A_%a.out" --array="1-$NUM_WINDOWS:2" -d "afterok:$SOLVE_JOB_ID_0" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+    SOLVE_JOB_ID_0=$(submit solve-even "${solve_res[@]}" --array="0-$NUM_WINDOWS:2$throttle" \
+        -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+    if ${SOLVE_PER_WINDOW_DEPS:-true}; then
+        # Each odd window waits only for its two even neighbours, so it can
+        # start while other even windows are still queued or running.
+        export_dep="afterok:$SOLVE_JOB_ID_0"
+        for (( w = 1; w <= NUM_WINDOWS; w += 2 )); do
+            window_dep="afterok:${SOLVE_JOB_ID_0}_$((w - 1))"
+            if (( w + 1 <= NUM_WINDOWS )); then
+                window_dep+=":${SOLVE_JOB_ID_0}_$((w + 1))"
+            fi
+            odd_id=$(submit "solve-odd-$w" "${solve_res[@]}" --array="$w-$w" \
+                -d "$window_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+            export_dep+=":$odd_id"
+        done
+    else
+        SOLVE_JOB_ID_1=$(submit solve-odd "${solve_res[@]}" --array="1-$NUM_WINDOWS:2" \
+            -d "afterok:$SOLVE_JOB_ID_0" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
+        export_dep="afterok:$SOLVE_JOB_ID_0:$SOLVE_JOB_ID_1"
+    fi
 fi
 
 EXPORT_JOB_ID=$(submit export --partition "$SHORT_PARTITION" --job-name "EXPORT_$JOB_NAME" --output "$LOG_DIR/export-%j.out" \
     --mem "$EXPORT_MEM" --time "$EXPORT_TIME" \
-    -d "afterok:$SOLVE_JOB_ID_1" --kill-on-invalid-dep=yes export.sh "$CFG_FILE")
+    -d "$export_dep" --kill-on-invalid-dep=yes export.sh "$CFG_FILE")
 
 # Stop the DB server once export ends in any state (upstream failures cancel
 # the chain via --kill-on-invalid-dep, so export always ends) and record what

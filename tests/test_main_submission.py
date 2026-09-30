@@ -37,7 +37,7 @@ def test_two_windows_submit_even_then_odd(cluster):
     assert r.returncode == 0, r.stderr + r.stdout
     solves = _by_script(cluster.sbatch_calls())["solve.sh"]
     arrays = [opt(a, "--array").split("%")[0] for a in solves]
-    assert arrays == ["0-1:2", "1-1:2"]
+    assert arrays == ["0-1:2", "1-1"]            # even pass, then odd window 1
 
 
 def test_config_is_overridable_from_environment(cluster):
