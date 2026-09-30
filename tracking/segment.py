@@ -83,6 +83,22 @@ def get_args():
         help="Batch size for labels to edges conversion"
     )
     parser.add_argument(
+        '-m','--mode',
+        dest="mode",
+        choices=["labels", "image"],
+        default="labels",
+        help="labels: foreground/contours from a label series (labels_to_edges, temporal blur); "
+             "image: from raw images with ultrack's detect_foreground and robust_invert, "
+             "as in ultrack's own examples (e.g. Fluo-N3DL-TRIC)"
+    )
+    parser.add_argument(
+        '--contour-sigma',
+        dest="contour_sigma",
+        type=float,
+        default=3.0,
+        help="image mode: robust_invert sigma for the contour map (ultrack TRIC example: 3.0)"
+    )
+    parser.add_argument(
         '-s','--scale',
         metavar="INT",
         dest="scale",
@@ -124,15 +140,26 @@ def main(args):
     first = max(time_points[0] - args.blur_padding, 0)
     last = min(time_points[-1] + args.blur_padding, label.shape[0] - 1)
 
-    # compute edges and detection, batch_size frames at a time
-    for t in tqdm(range(first, last + 1, args.batch_size), desc="Images to Edges"):
-        stop = min(t + args.batch_size, last + 1)
-        t_det, t_edges = labels_to_edges(np.asarray(label[t:stop]))
-        detection[t:stop] = t_det[:]
-        edges[t:stop] = t_edges[:]
+    if args.mode == "image":
+        # the series is raw images: foreground and contours per frame, exactly
+        # as ultrack's examples do (on GPU when cupy is available)
+        from ultrack.imgproc import detect_foreground, robust_invert
+        from ultrack.utils.cuda import on_gpu
+        foreground_fn, contour_fn = on_gpu(detect_foreground), on_gpu(robust_invert)
+        for t in tqdm(range(first, last + 1), desc="Images to foreground/contours"):
+            frame = np.asarray(label[t])
+            detection[t] = foreground_fn(frame)
+            edges[t] = contour_fn(frame, sigma=args.contour_sigma)
+    else:
+        # compute edges and detection, batch_size frames at a time
+        for t in tqdm(range(first, last + 1, args.batch_size), desc="Images to Edges"):
+            stop = min(t + args.batch_size, last + 1)
+            t_det, t_edges = labels_to_edges(np.asarray(label[t:stop]))
+            detection[t:stop] = t_det[:]
+            edges[t:stop] = t_edges[:]
 
-    # perform gaussian blur to create fuzzy edges in space and time
-    if sigma_t > 0 and args.blur_padding != 0:
+    # perform gaussian blur to create fuzzy edges in space and time (labels mode)
+    if args.mode == "labels" and sigma_t > 0 and args.blur_padding != 0:
         sigma = [sigma_t] + [sigma_xy] * (label.ndim - 1)
         edges[first:last + 1] = gaussian_filter(edges[first:last + 1], sigma=sigma)
 

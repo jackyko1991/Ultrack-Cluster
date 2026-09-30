@@ -75,4 +75,14 @@ def test_segment_job_passes_binning_to_segment_py(cluster):
                                  SLURM_SUBMIT_DIR=cluster.workdir, SLURM_ARRAY_TASK_ID=0, BINNING=3)
     assert r.returncode == 0, r.stderr
     (call,) = cluster.calls("python")
-    assert call.split()[-2:] == ["-s", "3"]
+    args = call.split()
+    assert args[args.index("-s") + 1] == "3"
+
+
+def test_segment_job_passes_segment_mode(cluster):
+    for env, mode, sigma in [({}, "labels", "3.0"), ({"SEGMENT_MODE": "image", "SEGMENT_CONTOUR_SIGMA": 2}, "image", "2")]:
+        r = cluster.run_as_slurm_job("segment.sh", "img/*.tif", "config.toml", "0", "11",
+                                     SLURM_SUBMIT_DIR=cluster.workdir, SLURM_ARRAY_TASK_ID=0, **env)
+        assert r.returncode == 0, r.stderr
+        args = cluster.calls("python")[-1].split()
+        assert args[args.index("-m") + 1] == mode and args[args.index("--contour-sigma") + 1] == sigma
