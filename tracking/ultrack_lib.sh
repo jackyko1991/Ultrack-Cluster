@@ -378,7 +378,10 @@ run_db_server() {
 
     if [[ "$mode" == create ]]; then
         run_ultrack createdb -h "$socket_dir" -p "$port" "$db_name" || return 1
-        run_ultrack psql -h "$socket_dir" -p "$port" -c "ALTER USER \"$USER\" PASSWORD '$ULTRACK_DB_PW';" "$db_name" || return 1
+        # SQL on stdin (printf is a builtin): the password never appears in a
+        # process's argv, which any user on the node can read with ps
+        printf 'ALTER USER "%s" PASSWORD '"'"'%s'"'"';\n' "$USER" "${ULTRACK_DB_PW//\'/\'\'}" \
+            | run_ultrack psql -q -v ON_ERROR_STOP=1 -h "$socket_dir" -p "$port" "$db_name" || return 1
     fi
 
     local addr="$USER:$ULTRACK_DB_PW@$host:$port/$db_name?gssencmode=disable"

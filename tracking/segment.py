@@ -9,7 +9,9 @@ from ultrack.utils.multiprocessing import batch_index_range
 
 import zarr
 from rich.pretty import pprint
+from sqlalchemy.engine import make_url
 import argparse
+import re
 import numpy as np
 import socket
 import time
@@ -110,11 +112,25 @@ def get_args():
     args = parser.parse_args()
     return args
 
+def redact_address(address):
+    """'user:password@host:port/db' -> 'user:***@host:port/db' (for logs)."""
+    return re.sub(r"^([^:@/]*):.*@", r"\1:***@", address or "")   # up to the last '@' 
+
+
+def db_host_port(cfg):
+    """Host and port of a postgresql config, parsed as a URL (safe for any password)."""
+    url = make_url(cfg.data_config.database_path)
+    return url.host, url.port or 5432
+
+
 def main(args):
     # load config file
     cfg = load_config(args.cfg)
     MAX_RETRIES=3
-    pprint(cfg)
+    # the config carries the coordination DB password: never print it
+    shown = cfg.model_dump() if hasattr(cfg, "model_dump") else cfg.dict()
+    shown["data_config"]["address"] = redact_address(shown["data_config"].get("address"))
+    pprint(shown)
 
     # read labels: (T, Y, X), or (T, Z, Y, X) for real Z-stacks
     label = open_labels(args.path, begin=args.begin, end=args.end, step=args.scale)
@@ -173,8 +189,7 @@ def main(args):
 
     # add segment to database
     if cfg.data_config.database == "postgresql":
-        ip = cfg.data_config.address.split("@")[1].split(":")[0]
-        port = int(cfg.data_config.address.split(':')[2].split('/')[0])
+        ip, port = db_host_port(cfg)
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:

@@ -27,6 +27,10 @@ ultrack = "==0.8.0"
 # major may need a newer token server.
 gurobipy = "==11.0.*"
 psycopg2-binary = "*"
+# SQLAlchemy >= 2.1 connects plain postgresql:// URLs (what ultrack builds) with
+# psycopg 3, not psycopg2; without it every postgresql-backed stage fails with
+# "No module named 'psycopg'".
+psycopg = { version = "*", extras = ["binary"] }
 
 # ultrack 0.8 requires torch, but only its imgproc models use it. Pinning the
 # conda-forge build per environment stops pip from installing the default CUDA
