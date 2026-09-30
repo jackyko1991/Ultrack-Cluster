@@ -32,15 +32,19 @@ def test_arrays_cover_every_item_exactly_once(cluster, frames, seg, link):
     _set_workers(cluster, seg, link)
     r = cluster.run("main.sh", BATCH_SIZE=frames, **FULL)
     assert r.returncode == 0, r.stderr
-    calls = {script_of(c): c for c in cluster.sbatch_calls()}
+    calls = {}
+    for c in cluster.sbatch_calls():
+        calls.setdefault(script_of(c), []).append(c)   # segment: init (batch 0) + rest
     for script, total, n in [("segment.sh", frames, seg), ("link.sh", frames - 1, link)]:
-        lo, hi = _array(calls[script])
-        assert lo == 0
-        covered = [t for i in range(lo, hi + 1) for t in ultrack_batch_index_range(total, n, i)]
+        ranges = [_array(c) for c in calls[script]]
+        assert ranges[0][0] == 0
+        indices = [i for lo, hi in ranges for i in range(lo, hi + 1)]
+        covered = [t for i in indices for t in ultrack_batch_index_range(total, n, i)]
         assert covered == list(range(total)), script          # all items, once, in order
         with pytest.raises(IndexError):                         # no task past the end
-            ultrack_batch_index_range(total, n, hi + 1)
-        assert opt(calls[script], "--cpus-per-task") == str(n)  # one CPU per worker process
+            ultrack_batch_index_range(total, n, indices[-1] + 1)
+        for c in calls[script]:
+            assert opt(c, "--cpus-per-task") == str(n)          # one CPU per worker process
 
 
 def test_connection_budget_warning(cluster):

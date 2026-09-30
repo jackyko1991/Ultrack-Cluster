@@ -31,8 +31,50 @@ Each job activates its environment itself, so nothing needs to be active in the 
 |---|---|
 | `ULTRACK_SIF=/path/ultrack-cluster.sif` | Run ultrack/python/PostgreSQL inside an Apptainer image built from [`containers/ultrack-cluster.def`](./containers/ultrack-cluster.def) (`apptainer build --fakeroot ultrack-cluster.sif containers/ultrack-cluster.def`). Bind mounts default to `/gpfs3`, `/well`, `/users`; override with `ULTRACK_SIF_ARGS`. |
 | `ULTRACK_ENV_ACTIVATE=/path/bin/activate` | Source this file (e.g. a venv). |
+| `ULTRACK_PIXI_ENV=<env>` | Activate an environment of this repo's [`pixi.toml`](./pixi.toml) (`pixi shell-hook`; manifest overridable with `ULTRACK_PIXI_MANIFEST`). `default` = CPU, `gpu` = CUDA; see [GPU](#gpu). Install first with `pixi install -e <env>`. |
 | `ULTRACK_CONDA_ENV=<prefix or name>` | Activate this conda env (a prefix directory is just put first on `PATH`). |
 | *(none)* | Legacy behaviour: `source ~/.bashrc; mamba activate cyto`. |
+
+### Environments and GPU
+<a id="gpu"></a>
+`pixi.toml` defines separate environments so CPU stages never pull CUDA libraries:
+
+| Env | Contents | Use |
+|---|---|---|
+| `default` | ultrack 0.8, PostgreSQL, dasel, gurobipy, **CPU** torch | every stage in this repo |
+| `gpu` | as `default`, but CUDA torch + cupy + cucim | segment jobs that do GPU work |
+| `test` | `default` + pytest | `pixi run -e test test` |
+
+**Does segment need a GPU?** Not in this repo. `segment.py` turns labels into foreground/contours
+(`labels_to_edges`) and builds hierarchies (`segment()`, higra, CPU only), so segment tasks request no
+GPU by default. ultrack uses the GPU in two places, and only if the environment has it:
+- `labels_to_edges`/`labels_to_contours` switch to cupy + cucim when cupy imports and CUDA is available (optional speed-up);
+- `ultrack.imgproc` (optical flow, SAM, PlantSeg) needs CUDA torch. A pipeline that makes foreground/contours
+  from raw images with these models belongs in a GPU segment job.
+
+To run segment on GPUs: `SEG_GPUS=1 ULTRACK_PIXI_ENV=default bash main.sh`. Segment tasks then go to
+`GPU_PARTITION` (default `gpu_short`) with `--gres gpu:$SEG_GPUS` and switch to `SEG_PIXI_ENV` (default `gpu`);
+DB, link, solve and export stay on the CPU env. With `ULTRACK_SIF`, `run_ultrack` adds `--nv` on GPU
+allocations, but the image must contain cupy/CUDA torch (the current `containers/ultrack-cluster.def`
+does not). With conda/venv activation, main.sh only warns: that env must have cupy itself.
+
+Why torch is pinned: ultrack 0.8 requires torch, and pip installs the CUDA build by default (~4 GB of
+`nvidia-*` wheels). `default`/`test` take the conda-forge CPU build instead.
+
+**Disk:** install into the workspace, not `~/.pixi/detached-envs` (on /home), and keep caches off /home, e.g.
+`RATTLER_CACHE_DIR=/mnt/RAID/.cache/rattler UV_CACHE_DIR=/mnt/RAID/.cache/uv pixi install`, with
+`detached-environments = false` in `.pixi/config.toml`.
+
+### Label Input
+`LABEL_SOURCE` (main.sh) / `-p` (segment.py) accepts either a TIFF glob, one 2D frame per file
+(default `$DATA_DIR/*.tif`), or a Zarr URI in the pyCyto/tanoa convention:
+`/data/exp.zarr#labels/Cellpose/TCell`, with `?c=<channel name or index>` for multi-channel stores.
+Zarr v2 and v3 are supported, and so are plain arrays (time first) and OME-NGFF 0.4/0.5 multiscale groups (level 0).
+A singleton Z axis is dropped. The frame count uses only the standard library (`python3 label_io.py frames <source>`),
+so the login node's system Python is enough.
+
+Segment batch 0 creates the DB tables, so main.sh submits it on its own (`segment-init`). The rest of the
+array depends on it with `afterok`, and link depends on both.
 
 ### PostgreSQL Server Setup
 Most cluster environment may not come with all necessary tools for the PostgreSQL server setup in [create_server.sh](./tracking/create_server.sh). For an automated software installation (script dedicated to BMRC folder structure but you may modify to fit your system's installation environment), edit `$INSTALL_DIR` in `install_server_dependency.sh` then run:

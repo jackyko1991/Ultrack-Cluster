@@ -7,8 +7,12 @@ export ULTRACK_CLUSTER_DIR="$ULTRACK_LIB_DIR"
 # Every setting below can be overridden from the environment, e.g.
 #   DATA_DIR=/path/to/labels BATCH_SIZE=40 bash main.sh
 DATA_DIR="${DATA_DIR:-/users/kir-fritzsche/oyk357/archive/utse_cyto/2023_10_03_Nyeso1_HCT116_framerate_10sec_flowrate_0p15mlperh/register_denoising_gamma_channel_merged_cropped/cancer_batch5}"
-LABEL_PATH_PATTERN=$DATA_DIR/*.tif
-TIME_LENGTH=$(ls $DATA_DIR -1 | wc -l)
+# Label source: a TIFF glob (one 2D frame per file) or a Zarr URI in the
+# pyCyto/tanoa convention, e.g. LABEL_SOURCE='/data/exp.zarr#labels/Cellpose/TCell'
+# (add '?c=<channel>' for a multi-channel store). See label_io.py.
+LABEL_PATH_PATTERN="${LABEL_SOURCE:-$DATA_DIR/*.tif}"
+# stdlib-only, so the login node's system python3 is enough
+TIME_LENGTH=$(python3 "$ULTRACK_LIB_DIR/label_io.py" frames "$LABEL_PATH_PATTERN")
 
 # uncomment below to manual overide the number of time steps to process, default taking all time slices
 BATCH="${BATCH:-3}" # begin from 1
@@ -61,6 +65,12 @@ SHORT_PARTITION="${SHORT_PARTITION:-short}" # short/long on BMRC
 SEG_MEM_GB_PER_WORKER="${SEG_MEM_GB_PER_WORKER:-4}"
 LINK_MEM_GB_PER_WORKER="${LINK_MEM_GB_PER_WORKER:-4}"
 SEG_TIME="${SEG_TIME:-06:00:00}"
+# GPUs per segment task. 0 (default) is right for this repo's segment step:
+# labels -> contours -> hierarchies runs on CPU. Set >0 only for GPU work
+# (cupy/cucim contours, ultrack.imgproc models); with the pixi runtime those
+# tasks then switch to the CUDA environment SEG_PIXI_ENV (see README "GPU").
+SEG_GPUS="${SEG_GPUS:-0}"
+SEG_PIXI_ENV="${SEG_PIXI_ENV:-gpu}"
 LINK_TIME="${LINK_TIME:-06:00:00}"
 SOLVE_MEM="${SOLVE_MEM:-32G}"
 SOLVE_CPUS="${SOLVE_CPUS:-4}"
@@ -74,7 +84,7 @@ EXPORT_TIME="${EXPORT_TIME:-1-00:00:00}"
 ################# ULTRACK VARIABLE AUTO SETTING #################
 TIME_STEPS_BINNED=$((TIME_STEPS/BINNING))
 if (( TIME_STEPS_BINNED < 2 )); then
-    log ERROR "need at least 2 time points to track, got $TIME_STEPS_BINNED from $DATA_DIR [$BEGIN_TIME:$END_TIME]"
+    log ERROR "need at least 2 time points to track, got $TIME_STEPS_BINNED from $LABEL_PATH_PATTERN [$BEGIN_TIME:$END_TIME]"
     exit 1
 fi
 export DS_LENGTH=$((TIME_STEPS_BINNED-1)) # number of time points - 1
@@ -97,6 +107,19 @@ LINK_LAST=$(last_batch_index "$DS_LENGTH" "$LINK_WORKERS")
 if [[ "$($DASEL_BIN -f "$CFG_FILE" "tracking.n_threads")" == 0 ]]; then
     log WARN "tracking.n_threads = 0 lets the solver use every core on the node; set it to SOLVE_CPUS=$SOLVE_CPUS"
 fi
+SEG_GPU_ARGS=()
+SEG_PARTITION="$SHORT_PARTITION"
+if (( SEG_GPUS > 0 )); then
+    SEG_PARTITION="${GPU_PARTITION:-gpu_short}"
+    SEG_GPU_ARGS=(--gres "gpu:$SEG_GPUS")
+    if [[ -n "${ULTRACK_SIF:-}" ]]; then
+        log WARN "SEG_GPUS=$SEG_GPUS with ULTRACK_SIF: the image must contain cupy/CUDA torch, or segment ignores the GPU"
+    elif [[ -n "${ULTRACK_PIXI_ENV:-}" ]]; then
+        SEG_GPU_ARGS+=(--export "ALL,ULTRACK_PIXI_ENV=$SEG_PIXI_ENV")
+    else
+        log WARN "SEG_GPUS=$SEG_GPUS: segment uses the GPU only if its environment has cupy/cucim (or CUDA torch)"
+    fi
+fi
 for workers in "$SEG_WORKERS" "$LINK_WORKERS"; do
     if (( MAX_JOBS * workers > ${ULTRACK_PG_MAX_CONNECTIONS:-500} * 9 / 10 )); then
         log WARN "MAX_JOBS=$MAX_JOBS x n_workers=$workers DB connections may exceed max_connections=${ULTRACK_PG_MAX_CONNECTIONS:-500}"
@@ -105,8 +128,9 @@ done
 
 export ULTRACK_STAGE=main
 LOG_DIR="$PWD/slurm_output/$JOB_NAME"
-log INFO "slices from $DATA_DIR: $TIME_STEPS [$BEGIN_TIME:$END_TIME], binning $BINNING -> $TIME_STEPS_BINNED steps"
+log INFO "slices from $LABEL_PATH_PATTERN: $TIME_STEPS [$BEGIN_TIME:$END_TIME], binning $BINNING -> $TIME_STEPS_BINNED steps"
 log INFO "window size $WINDOW_SIZE -> last window index $NUM_WINDOWS"
+log INFO "segment: partition $SEG_PARTITION, $SEG_GPUS GPU(s)/task"
 log INFO "segment: $SEG_WORKERS frames/task -> $((SEG_LAST + 1)) tasks; link: $LINK_WORKERS frames/task -> $((LINK_LAST + 1)) tasks"
 
 # fresh log dirs for the stages that will run
@@ -123,7 +147,7 @@ rm -f "$ULTRACK_DB_READY_FILE"
 MANIFEST="$LOG_DIR/submission.tsv"
 {
     echo "# submitted $(date '+%F %T') by $USER on $(hostname -s) repo=$(ultrack_cluster_version)"
-    echo "# data=$DATA_DIR frames=$BEGIN_TIME-$END_TIME binning=$BINNING window_size=$WINDOW_SIZE last_window=$NUM_WINDOWS config=$CFG_FILE"
+    echo "# data=$LABEL_PATH_PATTERN frames=$BEGIN_TIME-$END_TIME binning=$BINNING window_size=$WINDOW_SIZE last_window=$NUM_WINDOWS config=$CFG_FILE"
     printf 'stage\tjob_id\tsbatch_args\n'
 } > "$MANIFEST"
 
@@ -153,10 +177,20 @@ else
     SERVER_JOB_ID=$(submit db-server --partition "$LONG_PARTITION" --job-name "DATABASE_$JOB_NAME" \
         --mem "$DB_MEM" --cpus-per-task "$DB_CPUS" --time "$DB_TIME" \
         --output "$LOG_DIR/database-%j.out" create_server.sh "$CFG_FILE")
-    SEGM_JOB_ID=$(submit segment --partition "$SHORT_PARTITION" --job-name "SEGMENT_$JOB_NAME" \
-        --output "$LOG_DIR/segment/segment-%A_%a.out" --array="0-$SEG_LAST%$MAX_JOBS" --cpus-per-task="$SEG_WORKERS" \
-        --mem "$(( SEG_MEM_GB_PER_WORKER * SEG_WORKERS ))G" --time "$SEG_TIME" \
-        -d "after:$SERVER_JOB_ID" --kill-on-invalid-dep=yes segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
+    seg_args=(--partition "$SEG_PARTITION" --job-name "SEGMENT_$JOB_NAME" \
+        --output "$LOG_DIR/segment/segment-%A_%a.out" --cpus-per-task="$SEG_WORKERS" \
+        ${SEG_GPU_ARGS[@]+"${SEG_GPU_ARGS[@]}"} \
+        --mem "$(( SEG_MEM_GB_PER_WORKER * SEG_WORKERS ))G" --time "$SEG_TIME" --kill-on-invalid-dep=yes)
+    seg_cmd=(segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
+    # Batch 0 creates the tables (and clears any old data), so it runs alone
+    # first: the other batches start only once it has succeeded, and a late or
+    # requeued batch 0 can no longer wipe segments they already inserted.
+    SEGM_JOB_ID=$(submit segment-init "${seg_args[@]}" --array=0-0 -d "after:$SERVER_JOB_ID" "${seg_cmd[@]}")
+    if (( SEG_LAST >= 1 )); then
+        seg_rest=$(submit segment "${seg_args[@]}" --array="1-$SEG_LAST%$MAX_JOBS" \
+            -d "afterok:$SEGM_JOB_ID" "${seg_cmd[@]}")
+        SEGM_JOB_ID="$SEGM_JOB_ID:$seg_rest"   # afterok:<init>:<rest> downstream
+    fi
 fi
 
 if [[ -d "../flow.zarr" ]]; then

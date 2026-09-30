@@ -1,0 +1,60 @@
+[workspace]
+name = "ultrack-cluster"
+description = "SLURM/PostgreSQL distributed runs of ultrack"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+# Everything a job needs. Jobs activate it with ULTRACK_PIXI_ENV=<env>
+# (see README "Runtime Environment").
+#
+# Environments (kept separate so CPU stages never pull CUDA):
+#   default  CPU only. Every stage in this repo: segment (labels -> contours
+#            -> hierarchies), link, solve, export, and the DB server.
+#   gpu      default + CUDA torch, cupy, cucim. Only for segment jobs that do
+#            GPU work: ultrack's labels_to_contours switches to cupy/cucim
+#            when cupy is importable, and ultrack.imgproc (flow, SAM,
+#            PlantSeg) needs CUDA torch. Submit with SEG_GPUS=1 (main.sh).
+#   test     default + pytest.
+[dependencies]
+python = "3.11.*"
+postgresql = "16.*"
+dasel = "2.8.*"          # main.sh/run_db_server use dasel v2 syntax; v3 changed the CLI
+dask-image = "*"
+tifffile = "*"
+[pypi-dependencies]
+ultrack = "==0.8.0"
+# BMRC's Gurobi token server was verified with an 11.x client; a newer client
+# major may need a newer token server.
+gurobipy = "==11.0.*"
+psycopg2-binary = "*"
+
+# ultrack 0.8 requires torch, but only its imgproc models use it. Pinning the
+# conda-forge build per environment stops pip from installing the default CUDA
+# wheel (and ~4 GB of nvidia-* libraries) into CPU environments. (pixi merges
+# specs across features rather than overriding them, so the CPU pin cannot live
+# in the base dependencies.)
+[feature.cpu.dependencies]
+pytorch = { version = ">=2.0.1", build = "cpu*" }
+
+[feature.gpu.system-requirements]
+cuda = "12"              # minimum driver's CUDA version on the GPU nodes
+
+[feature.gpu.dependencies]
+pytorch = { version = ">=2.0.1", build = "cuda*" }
+
+# cucim is not on conda-forge; its wheel brings cupy-cuda12x, so cupy comes
+# from PyPI too (a conda cupy alongside it would be a second, clashing copy).
+[feature.gpu.pypi-dependencies]
+cucim-cu12 = "*"
+cupy-cuda12x = "*"
+
+[feature.test.dependencies]
+pytest = "*"
+
+[environments]
+default = ["cpu"]
+gpu = ["gpu"]
+test = ["cpu", "test"]
+
+[tasks]
+test = { cmd = "pytest tests", env = { PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1" } }

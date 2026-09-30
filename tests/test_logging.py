@@ -34,12 +34,12 @@ def test_successful_job_logs_start_and_done(cluster):
 
 
 def test_failed_job_names_the_failing_command(cluster):
-    cluster.stub("ultrack", FAILING)
+    cluster.stub("python", FAILING)
     r = cluster.run_as_slurm_job("link.sh", "config.toml", SLURM_SUBMIT_DIR=cluster.workdir,
                                  SLURM_ARRAY_TASK_ID=2)
     assert r.returncode == 3
     errors = [m.group(5) for m in _lines(r.stderr) if m.group(1).strip() == "ERROR"]
-    assert any("exit 3" in e and "ultrack link" in e for e in errors), errors
+    assert any("exit 3" in e and "ultrack_worker.py link" in e for e in errors), errors
     assert errors[-1].startswith("FAILED (exit 3)")
 
 
@@ -79,11 +79,12 @@ def test_main_writes_a_submission_manifest(cluster):
     assert manifest[0].startswith("# submitted") and "repo=" in manifest[0]
     assert "window_size=20" in manifest[1]
     rows = [l.split("\t") for l in manifest[3:]]
-    assert [r[0] for r in rows] == ["db-server", "segment", "link", "solve-even", "solve-odd-1", "export", "cleanup"]
+    assert [r[0] for r in rows] == ["db-server", "segment-init", "segment", "link", "solve-even", "solve-odd-1", "export", "cleanup"]
     assert [r[1] for r in rows] == [str(1001 + i) for i in range(len(rows))]
     # submit() must print only the job id on stdout, or dependencies break
     deps = [row[2] for row in rows]
-    assert "after:1001" in deps[1] and "afterok:1003" in deps[3]
+    assert "after:1001" in deps[1] and "afterok:1002" in deps[2]
+    assert "afterok:1002:1003" in deps[3] and "afterok:1004" in deps[4]
 
 
 def test_no_useless_error_line_for_function_returns(cluster):

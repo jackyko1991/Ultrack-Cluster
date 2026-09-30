@@ -119,6 +119,11 @@ activate_ultrack_env() {
     _ULTRACK_QUIET_ERR=1
     if [[ -n "${ULTRACK_ENV_ACTIVATE:-}" ]]; then
         source "$ULTRACK_ENV_ACTIVATE"
+    elif [[ -n "${ULTRACK_PIXI_ENV:-}" ]]; then
+        # an environment of this repo's pixi.toml (default = CPU, gpu = CUDA)
+        local hook
+        hook=$(pixi shell-hook -e "$ULTRACK_PIXI_ENV" \
+            --manifest-path "${ULTRACK_PIXI_MANIFEST:-$ULTRACK_LIB_DIR/../pixi.toml}") && eval "$hook"
     elif [[ -n "${ULTRACK_CONDA_ENV:-}" && -d "$ULTRACK_CONDA_ENV" ]]; then
         export CONDA_PREFIX="$ULTRACK_CONDA_ENV"
         export PATH="$ULTRACK_CONDA_ENV/bin:$PATH"
@@ -139,9 +144,11 @@ activate_ultrack_env() {
     log INFO "environment: python=$(command -v python || echo MISSING)"
 }
 
-# apptainer bind arguments, one per line: ULTRACK_SIF_ARGS (word-split) if
-# set, else --bind for each BMRC filesystem present on this node.
+# apptainer arguments, one per line: ULTRACK_SIF_ARGS (word-split) if set,
+# else --bind for each BMRC filesystem present on this node; plus --nv when
+# SLURM gave this job GPUs, so CUDA is visible inside the container.
 ultrack_sif_args() {
+    if [[ -n "${SLURM_JOB_GPUS:-}${SLURM_STEP_GPUS:-}" ]]; then echo --nv; fi
     if [[ -n "${ULTRACK_SIF_ARGS+x}" ]]; then
         local a
         for a in $ULTRACK_SIF_ARGS; do echo "$a"; done

@@ -1,10 +1,10 @@
 import os
-import dask_image.imread
+import sys
 
-from ultrack.utils import estimate_parameters_from_labels, labels_to_edges
-from ultrack.utils.array import array_apply, create_zarr
+from ultrack.utils import labels_to_edges
+from ultrack.utils.array import create_zarr
 from scipy.ndimage import gaussian_filter
-from ultrack import segment, MainConfig, load_config
+from ultrack import segment, load_config
 from ultrack.utils.multiprocessing import batch_index_range
 
 import zarr
@@ -15,6 +15,9 @@ import socket
 import time
 from tqdm import tqdm
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from label_io import open_labels  # noqa: E402
+
 def get_args():
     parser = argparse.ArgumentParser(description="CLI worker for ultrack segment task")
     
@@ -23,7 +26,7 @@ def get_args():
         type=str,
         metavar="PATH_PATTERN",
         dest="path",
-        help='Path pattern of the label files'
+        help="Label source: a TIFF glob ('/data/*.tif') or a Zarr URI ('/data/exp.zarr#labels/Cellpose/TCell[?c=channel]')"
         )
     parser.add_argument(
         '-c', '--cfg', 
@@ -97,12 +100,8 @@ def main(args):
     MAX_RETRIES=3
     pprint(cfg)
 
-    # read image
-    LABEL_PATH_PATTERN = args.path
-    if args.end != -1:
-        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[args.begin:args.end+1:args.scale]
-    else:
-        label = dask_image.imread.imread(LABEL_PATH_PATTERN)[args.begin::args.scale]
+    # read labels: (T, Y, X), or (T, Z, Y, X) for real Z-stacks
+    label = open_labels(args.path, begin=args.begin, end=args.end, step=args.scale)
 
     # same function used in `segment` call below
     time_points = list(batch_index_range(
@@ -115,34 +114,35 @@ def main(args):
     sigma_xy = 1.0
     sigma_t = 1.2
 
-    # I'm assuming it fits into memory, zarr.TempStore could be used otherwise
-    detection = create_zarr(label.shape, dtype=np.bool_,store_or_path=zarr.MemoryStore())
-    edges = create_zarr(label.shape, dtype=np.float32,store_or_path=zarr.MemoryStore())
+    # Full-length arrays, as segment() indexes them by absolute frame; only
+    # this task's frames (plus blur padding) are written, so the in-memory
+    # store holds just those chunks.
+    detection = create_zarr(label.shape, dtype=np.bool_, store_or_path=zarr.storage.MemoryStore())
+    edges = create_zarr(label.shape, dtype=np.float32, store_or_path=zarr.storage.MemoryStore())
 
-    if args.blur_padding != 0:
-        # load padding slices for temporal blurring
-        for _ in range(args.blur_padding):
-            time_points.insert(0,time_points[0]-1)
-            time_points.append(time_points[-1]+1)
+    # frames to convert: the batch plus padding for temporal blurring
+    first = max(time_points[0] - args.blur_padding, 0)
+    last = min(time_points[-1] + args.blur_padding, label.shape[0] - 1)
 
-        # filter out of range indices
-        time_points = [x for x in time_points if 0 <= x <= label.shape[0]]
-
-    LABEL_TO_EDGE_TIME_BATCH_SZ = args.batch_size
-
-    # compute edges and detection for a subset of points
-    # TODO: parallelize the process
-    for t in tqdm(range(0,len(time_points),LABEL_TO_EDGE_TIME_BATCH_SZ),desc="Images to Edges"):
-        end_t = t+LABEL_TO_EDGE_TIME_BATCH_SZ
-        if end_t > len(label):
-            end_t = len(label)
-        t_det, t_edges = labels_to_edges(np.asarray(label[t:t+LABEL_TO_EDGE_TIME_BATCH_SZ,:,:])) # accept only list of labels, retains time dim for readability
-        detection[t:t+LABEL_TO_EDGE_TIME_BATCH_SZ,:,:] = t_det
-        edges[t:t+LABEL_TO_EDGE_TIME_BATCH_SZ,:,:] = t_edges
+    # compute edges and detection, batch_size frames at a time
+    for t in tqdm(range(first, last + 1, args.batch_size), desc="Images to Edges"):
+        stop = min(t + args.batch_size, last + 1)
+        t_det, t_edges = labels_to_edges(np.asarray(label[t:stop]))
+        detection[t:stop] = t_det[:]
+        edges[t:stop] = t_edges[:]
 
     # perform gaussian blur to create fuzzy edges in space and time
     if sigma_t > 0 and args.blur_padding != 0:
-        edges[time_points[0]:time_points[-1]+1] = gaussian_filter(edges[time_points[0]:time_points[-1]+1], sigma=[sigma_t,sigma_xy,sigma_xy])
+        sigma = [sigma_t] + [sigma_xy] * (label.ndim - 1)
+        edges[first:last + 1] = gaussian_filter(edges[first:last + 1], sigma=sigma)
+
+    # Only batch 0 (or an unbatched run) may clear the database: ultrack
+    # creates the tables in that batch and clear_all_data()s them when
+    # overwrite=True. Any other batch passing overwrite=True is harmless only
+    # because ultrack ignores it there -- but batch 0 must never run after the
+    # others have inserted (main.sh runs it as its own job first; a late or
+    # requeued batch 0 with overwrite would silently wipe their segments).
+    overwrite = args.batch_index in (None, 0)
 
     # add segment to database
     if cfg.data_config.database == "postgresql":
@@ -168,7 +168,7 @@ def main(args):
                     edges,
                     cfg,
                     batch_index=args.batch_index,
-                    overwrite=True,
+                    overwrite=overwrite,
                     insertion_throttle_rate=50
                 )
                 print("Adding segmentation to PostgreSQL DB success")
@@ -194,7 +194,7 @@ def main(args):
             edges,
             cfg,
             batch_index=args.batch_index,
-            overwrite=True,
+            overwrite=overwrite,
             insertion_throttle_rate=50
         )
         print("Adding segmentation to Sqlite DB success")

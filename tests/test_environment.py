@@ -60,3 +60,22 @@ def test_worker_scripts_no_longer_hardcode_an_env(cluster):
         text = (cluster.workdir / script).read_text()
         assert "mamba activate" not in text, script
         assert "activate_ultrack_env" in text, script
+
+
+def test_pixi_env_is_activated_from_repo_manifest(cluster):
+    cluster.stub("pixi", '#!/bin/bash\necho "pixi $*" >> "$STUB_LOG_DIR/calls.log"\necho "export MARKER=pixi-$3"\n')
+    r = cluster.bash('activate_ultrack_env && echo "m=$MARKER"', ULTRACK_PIXI_ENV="gpu")
+    assert r.returncode == 0, r.stderr
+    assert "m=pixi-gpu" in r.stdout
+    call = cluster.calls("pixi")[0]
+    assert call.startswith("pixi shell-hook -e gpu --manifest-path ") and call.endswith("/pixi.toml")
+
+
+def test_container_gets_nv_only_on_gpu_allocations(cluster):
+    base = dict(ULTRACK_SIF="/imgs/u.sif", ULTRACK_SIF_ARGS="--bind /data")
+    cluster.bash("run_ultrack python segment.py", **base)
+    cluster.bash("run_ultrack python segment.py", SLURM_JOB_GPUS="0", **base)
+    assert cluster.calls("apptainer") == [
+        "apptainer exec --bind /data /imgs/u.sif python segment.py",
+        "apptainer exec --nv --bind /data /imgs/u.sif python segment.py",
+    ]
