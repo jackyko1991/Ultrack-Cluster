@@ -65,10 +65,26 @@ WINDOW_SIZE=$($DASEL_BIN -f $CFG_FILE "tracking.window_size")
 # last 0-based window index: ceil(DS_LENGTH / window_size) - 1
 NUM_WINDOWS=$(last_batch_index "$DS_LENGTH" "$WINDOW_SIZE")
 
+# Frames per array task = the config's n_workers: ultrack's batch_index_range
+# gives batch i the items [i*n, (i+1)*n) and processes them with an n-process
+# pool, so the array size, n_workers and --cpus-per-task must agree (an array
+# sized for n=1 with n>1 in the config indexes past the end and fails).
+# segment() splits the T frames; link() splits range(max_t) = the T-1 pairs.
+SEG_WORKERS=$($DASEL_BIN -f "$CFG_FILE" "segmentation.n_workers")
+LINK_WORKERS=$($DASEL_BIN -f "$CFG_FILE" "linking.n_workers")
+SEG_LAST=$(last_batch_index "$TIME_STEPS_BINNED" "$SEG_WORKERS")
+LINK_LAST=$(last_batch_index "$DS_LENGTH" "$LINK_WORKERS")
+for workers in "$SEG_WORKERS" "$LINK_WORKERS"; do
+    if (( MAX_JOBS * workers > ${ULTRACK_PG_MAX_CONNECTIONS:-500} * 9 / 10 )); then
+        log WARN "MAX_JOBS=$MAX_JOBS x n_workers=$workers DB connections may exceed max_connections=${ULTRACK_PG_MAX_CONNECTIONS:-500}"
+    fi
+done
+
 export ULTRACK_STAGE=main
 LOG_DIR="$PWD/slurm_output/$JOB_NAME"
 log INFO "slices from $DATA_DIR: $TIME_STEPS [$BEGIN_TIME:$END_TIME], binning $BINNING -> $TIME_STEPS_BINNED steps"
 log INFO "window size $WINDOW_SIZE -> last window index $NUM_WINDOWS"
+log INFO "segment: $SEG_WORKERS frames/task -> $((SEG_LAST + 1)) tasks; link: $LINK_WORKERS frames/task -> $((LINK_LAST + 1)) tasks"
 
 # fresh log dirs for the stages that will run
 rm -f "$LOG_DIR"/*.out "$LOG_DIR"/segment/*.out "$LOG_DIR"/link/*.out "$LOG_DIR"/solve/*.out
@@ -113,7 +129,7 @@ else
     SERVER_JOB_ID=$(submit db-server --partition "$LONG_PARTITION" --job-name "DATABASE_$JOB_NAME" \
         --output "$LOG_DIR/database-%j.out" create_server.sh "$CFG_FILE")
     SEGM_JOB_ID=$(submit segment --partition "$SHORT_PARTITION" --job-name "SEGMENT_$JOB_NAME" \
-        --output "$LOG_DIR/segment/segment-%A_%a.out" --array="0-$DS_LENGTH%$MAX_JOBS" \
+        --output "$LOG_DIR/segment/segment-%A_%a.out" --array="0-$SEG_LAST%$MAX_JOBS" --cpus-per-task="$SEG_WORKERS" \
         -d "after:$SERVER_JOB_ID" --kill-on-invalid-dep=yes segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
 fi
 
@@ -133,7 +149,7 @@ if $SKIP_LINK; then
 else
     if $SKIP_SEG; then link_dep="after:$FLOW_JOB_ID"; else link_dep="afterok:$FLOW_JOB_ID"; fi
     LINK_JOB_ID=$(submit link --partition "$SHORT_PARTITION" --job-name "LINK_$JOB_NAME" \
-        --output "$LOG_DIR/link/link-%A_%a.out" --array="0-$((DS_LENGTH - 1))%$MAX_JOBS" \
+        --output "$LOG_DIR/link/link-%A_%a.out" --array="0-$LINK_LAST%$MAX_JOBS" --cpus-per-task="$LINK_WORKERS" \
         -d "$link_dep" --kill-on-invalid-dep=yes link.sh "$CFG_FILE")
 fi
 
