@@ -1,11 +1,11 @@
 #! /bin/bash
 
 #SBATCH --job-name=EXPORT
-#SBATCH --time=24:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --partition=short
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --cpus-per-task=1
 #SBATCH --output=./slurm_output/export-%j.out
 

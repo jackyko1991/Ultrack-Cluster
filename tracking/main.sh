@@ -51,6 +51,26 @@ fi
 LONG_PARTITION="${LONG_PARTITION:-long}"
 SHORT_PARTITION="${SHORT_PARTITION:-short}" # short/long on BMRC
 
+################# RESOURCES #################
+# Per-stage requests, passed explicitly to sbatch. Defaults are well below the
+# old ones (15G per segment/link task, 300G/20 CPUs for 10 days for the DB)
+# yet keep headroom over what the 2026-09-30 smoke test measured on an
+# 800x800 patch (0.65 GB per segment/link frame, 3.6 GB for a solve window);
+# full-FOV frames are ~9x larger. After a run, slurm_output/<job>/
+# resource_report_summary.tsv suggests values from the actual peaks.
+SEG_MEM_GB_PER_WORKER="${SEG_MEM_GB_PER_WORKER:-4}"
+LINK_MEM_GB_PER_WORKER="${LINK_MEM_GB_PER_WORKER:-4}"
+SEG_TIME="${SEG_TIME:-06:00:00}"
+LINK_TIME="${LINK_TIME:-06:00:00}"
+SOLVE_MEM="${SOLVE_MEM:-32G}"
+SOLVE_CPUS="${SOLVE_CPUS:-4}"
+SOLVE_TIME="${SOLVE_TIME:-1-06:00:00}"
+DB_MEM="${DB_MEM:-64G}"
+DB_CPUS="${DB_CPUS:-8}"
+DB_TIME="${DB_TIME:-7-00:00:00}"   # upper bound only: cleanup.sh stops it when export ends
+EXPORT_MEM="${EXPORT_MEM:-32G}"
+EXPORT_TIME="${EXPORT_TIME:-1-00:00:00}"
+
 ################# ULTRACK VARIABLE AUTO SETTING #################
 TIME_STEPS_BINNED=$((TIME_STEPS/BINNING))
 if (( TIME_STEPS_BINNED < 2 )); then
@@ -74,6 +94,9 @@ SEG_WORKERS=$($DASEL_BIN -f "$CFG_FILE" "segmentation.n_workers")
 LINK_WORKERS=$($DASEL_BIN -f "$CFG_FILE" "linking.n_workers")
 SEG_LAST=$(last_batch_index "$TIME_STEPS_BINNED" "$SEG_WORKERS")
 LINK_LAST=$(last_batch_index "$DS_LENGTH" "$LINK_WORKERS")
+if [[ "$($DASEL_BIN -f "$CFG_FILE" "tracking.n_threads")" == 0 ]]; then
+    log WARN "tracking.n_threads = 0 lets the solver use every core on the node; set it to SOLVE_CPUS=$SOLVE_CPUS"
+fi
 for workers in "$SEG_WORKERS" "$LINK_WORKERS"; do
     if (( MAX_JOBS * workers > ${ULTRACK_PG_MAX_CONNECTIONS:-500} * 9 / 10 )); then
         log WARN "MAX_JOBS=$MAX_JOBS x n_workers=$workers DB connections may exceed max_connections=${ULTRACK_PG_MAX_CONNECTIONS:-500}"
@@ -123,13 +146,16 @@ submit() {
 
 if $SKIP_SEG; then
     SERVER_JOB_ID=$(submit db-server --partition "$LONG_PARTITION" --job-name "DATABASE_$JOB_NAME" \
+        --mem "$DB_MEM" --cpus-per-task "$DB_CPUS" --time "$DB_TIME" \
         --output "$LOG_DIR/database-%j.out" resume_server.sh "$CFG_FILE")
     SEGM_JOB_ID=$SERVER_JOB_ID
 else
     SERVER_JOB_ID=$(submit db-server --partition "$LONG_PARTITION" --job-name "DATABASE_$JOB_NAME" \
+        --mem "$DB_MEM" --cpus-per-task "$DB_CPUS" --time "$DB_TIME" \
         --output "$LOG_DIR/database-%j.out" create_server.sh "$CFG_FILE")
     SEGM_JOB_ID=$(submit segment --partition "$SHORT_PARTITION" --job-name "SEGMENT_$JOB_NAME" \
         --output "$LOG_DIR/segment/segment-%A_%a.out" --array="0-$SEG_LAST%$MAX_JOBS" --cpus-per-task="$SEG_WORKERS" \
+        --mem "$(( SEG_MEM_GB_PER_WORKER * SEG_WORKERS ))G" --time "$SEG_TIME" \
         -d "after:$SERVER_JOB_ID" --kill-on-invalid-dep=yes segment.sh "$LABEL_PATH_PATTERN" "$CFG_FILE" "$BEGIN_TIME" "$END_TIME")
 fi
 
@@ -150,6 +176,7 @@ else
     if $SKIP_SEG; then link_dep="after:$FLOW_JOB_ID"; else link_dep="afterok:$FLOW_JOB_ID"; fi
     LINK_JOB_ID=$(submit link --partition "$SHORT_PARTITION" --job-name "LINK_$JOB_NAME" \
         --output "$LOG_DIR/link/link-%A_%a.out" --array="0-$LINK_LAST%$MAX_JOBS" --cpus-per-task="$LINK_WORKERS" \
+        --mem "$(( LINK_MEM_GB_PER_WORKER * LINK_WORKERS ))G" --time "$LINK_TIME" \
         -d "$link_dep" --kill-on-invalid-dep=yes link.sh "$CFG_FILE")
 fi
 
@@ -160,15 +187,19 @@ fi
 if $SKIP_LINK; then solve_dep="after:$LINK_JOB_ID"; else solve_dep="afterok:$LINK_JOB_ID"; fi
 if [[ $NUM_WINDOWS -eq 0 ]]; then
     SOLVE_JOB_ID_1=$(submit solve --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
+        --mem "$SOLVE_MEM" --cpus-per-task "$SOLVE_CPUS" --time "$SOLVE_TIME" \
         --output "$LOG_DIR/solve/solve-%A_%a.out" --array=0-0 -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
 else
     SOLVE_JOB_ID_0=$(submit solve-even --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
+        --mem "$SOLVE_MEM" --cpus-per-task "$SOLVE_CPUS" --time "$SOLVE_TIME" \
         --output "$LOG_DIR/solve/solve-%A_%a.out" --array="0-$NUM_WINDOWS:2" -d "$solve_dep" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
     SOLVE_JOB_ID_1=$(submit solve-odd --partition "$SHORT_PARTITION" --job-name "SOLVE_$JOB_NAME" \
+        --mem "$SOLVE_MEM" --cpus-per-task "$SOLVE_CPUS" --time "$SOLVE_TIME" \
         --output "$LOG_DIR/solve/solve-%A_%a.out" --array="1-$NUM_WINDOWS:2" -d "afterok:$SOLVE_JOB_ID_0" --kill-on-invalid-dep=yes solve.sh "$CFG_FILE")
 fi
 
-EXPORT_JOB_ID=$(submit export --job-name "EXPORT_$JOB_NAME" --output "$LOG_DIR/export-%j.out" \
+EXPORT_JOB_ID=$(submit export --partition "$SHORT_PARTITION" --job-name "EXPORT_$JOB_NAME" --output "$LOG_DIR/export-%j.out" \
+    --mem "$EXPORT_MEM" --time "$EXPORT_TIME" \
     -d "afterok:$SOLVE_JOB_ID_1" --kill-on-invalid-dep=yes export.sh "$CFG_FILE")
 
 # Stop the DB server once export ends in any state (upstream failures cancel

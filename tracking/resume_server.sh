@@ -1,12 +1,12 @@
 #!/bin/bash
 
 #SBATCH --job-name=DATABASE
-#SBATCH --time=10-00:00:00
+#SBATCH --time=7-00:00:00
 #SBATCH --partition=long
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
-#SBATCH --mem=300G
-#SBATCH --cpus-per-task=20
+#SBATCH --mem=64G
+#SBATCH --cpus-per-task=8
 #SBATCH --dependency=singleton
 #SBATCH --output=./slurm_output/database-%j.out
 
