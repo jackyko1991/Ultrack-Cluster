@@ -1,7 +1,7 @@
 """solve.sh must hand ultrack a Gurobi license, or python-mip silently uses CBC."""
 
-ULTRACK_ENV_STUB = """#!/bin/bash
-echo "ultrack $* GRB_LICENSE_FILE=${GRB_LICENSE_FILE:-}" >> "$STUB_LOG_DIR/calls.log"
+PYTHON_ENV_STUB = """#!/bin/bash
+echo "python $* GRB_LICENSE_FILE=${GRB_LICENSE_FILE:-}" >> "$STUB_LOG_DIR/calls.log"
 """
 
 
@@ -32,9 +32,10 @@ def test_missing_license_warns_but_does_not_fail(cluster, tmp_path):
 def test_solve_job_passes_license_to_ultrack_and_skips_dead_module(cluster, tmp_path):
     lic = tmp_path / "gurobi.lic"
     lic.touch()
-    cluster.stub("ultrack", ULTRACK_ENV_STUB)
+    cluster.stub("python", PYTHON_ENV_STUB)
     r = cluster.run_as_slurm_job("solve.sh", "config.toml", SLURM_SUBMIT_DIR=cluster.workdir,
                                  SLURM_ARRAY_TASK_ID=3, ULTRACK_GUROBI_LICENSE=lic)
     assert r.returncode == 0, r.stderr + r.stdout
-    assert cluster.calls("ultrack") == [f"ultrack solve -cfg config.toml -b 3 GRB_LICENSE_FILE={lic}"]
+    assert cluster.calls("python") == [
+        f"python {cluster.workdir}/ultrack_worker.py solve -cfg config.toml -b 3 GRB_LICENSE_FILE={lic}"]
     assert not any("Gurobi" in c for c in cluster.calls("module"))

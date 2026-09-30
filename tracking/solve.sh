@@ -34,4 +34,5 @@ start_stage solve
 activate_ultrack_env || exit 1
 wait_for_db || exit 1
 setup_gurobi_license
-run_ultrack ultrack solve -cfg "$1" -b "${SLURM_ARRAY_TASK_ID:?must run as a SLURM array task (sbatch --array)}"
+# ultrack's own CLI needs Qt/OpenGL/fontconfig just to start (0.8.0); see ultrack_worker.py
+run_ultrack python "$ULTRACK_CLUSTER_DIR/ultrack_worker.py" solve -cfg "$1" -b "${SLURM_ARRAY_TASK_ID:?must run as a SLURM array task (sbatch --array)}"

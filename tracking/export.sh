@@ -50,5 +50,6 @@ else
 fi
 
 echo "Exporting Ultrack results...."
-run_ultrack ultrack export zarr-napari -cfg "$1" -o "$directory" -ow
+# ultrack's own CLI needs Qt/OpenGL/fontconfig just to start (0.8.0); see ultrack_worker.py
+run_ultrack python "$ULTRACK_CLUSTER_DIR/ultrack_worker.py" export -cfg "$1" -o "$directory" -ow
 echo "Exporting Ultrack results complete"

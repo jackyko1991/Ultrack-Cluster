@@ -18,7 +18,7 @@ def test_explicit_cluster_dir_wins_over_submit_dir(cluster):
         SLURM_ARRAY_TASK_ID=0,
     )
     assert r.returncode == 0, r.stderr + r.stdout
-    assert cluster.calls("ultrack") == ["ultrack link -cfg config.toml -b 0"]
+    assert cluster.calls("python") == [f"python {cluster.workdir}/ultrack_worker.py link -cfg config.toml -b 0"]
 
 
 def test_job_fails_clearly_when_repo_cannot_be_found(cluster):
@@ -27,7 +27,7 @@ def test_job_fails_clearly_when_repo_cannot_be_found(cluster):
     )
     assert r.returncode != 0
     assert "ULTRACK_CLUSTER_DIR" in r.stderr
-    assert cluster.calls("ultrack") == []
+    assert cluster.calls("python") == []
 
 
 def test_main_exports_cluster_dir_for_jobs(cluster):

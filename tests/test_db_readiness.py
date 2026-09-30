@@ -67,7 +67,7 @@ def test_worker_waits_for_db_before_running_ultrack(cluster, listener):
                                  SLURM_ARRAY_TASK_ID=0, ULTRACK_DB_READY_FILE=ready)
     assert r.returncode == 0, r.stderr
     assert "DB reachable" in r.stdout
-    assert cluster.calls("ultrack") == ["ultrack link -cfg config.toml -b 0"]
+    assert cluster.calls("python") == [f"python {cluster.workdir}/ultrack_worker.py link -cfg config.toml -b 0"]
 
 
 def test_worker_does_not_run_ultrack_if_db_never_comes_up(cluster):
@@ -75,7 +75,7 @@ def test_worker_does_not_run_ultrack_if_db_never_comes_up(cluster):
                                  SLURM_ARRAY_TASK_ID=0, ULTRACK_DB_READY_FILE=cluster.root / "absent",
                                  ULTRACK_DB_WAIT_TIMEOUT=1, ULTRACK_DB_POLL_INTERVAL="0.1")
     assert r.returncode != 0
-    assert cluster.calls("ultrack") == []
+    assert cluster.calls("python") == []
 
 
 def test_main_uses_readiness_not_fixed_delays(cluster):

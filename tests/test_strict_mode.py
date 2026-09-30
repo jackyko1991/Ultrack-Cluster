@@ -19,7 +19,7 @@ def test_strict_mode_is_on_and_after_sbatch_directives(cluster, script):
 
 def test_export_failure_is_not_reported_as_success(cluster):
     # export.sh used to end with `echo "... complete"`, masking ultrack's exit code
-    cluster.stub("ultrack", FAILING)
+    cluster.stub("python", FAILING)
     r = cluster.run_as_slurm_job("export.sh", "config.toml", SLURM_SUBMIT_DIR=cluster.workdir)
     assert r.returncode != 0
     assert "complete" not in r.stdout.split("\n")[-2:]
@@ -38,7 +38,7 @@ def test_missing_arguments_give_usage_errors(cluster, script):
     r = cluster.run_as_slurm_job(script, SLURM_SUBMIT_DIR=cluster.workdir, SLURM_ARRAY_TASK_ID=0)
     assert r.returncode != 0
     assert "usage" in r.stderr
-    assert cluster.calls("ultrack") == []
+    assert cluster.calls("python") == []
 
 
 def test_worker_outside_an_array_job_fails_clearly(cluster):
