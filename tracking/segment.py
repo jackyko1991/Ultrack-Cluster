@@ -70,11 +70,12 @@ def get_args():
     )
     parser.add_argument(
         '-bp','--blur_padding',
-        metavar="INT",
+        metavar="INT|auto",
         dest="blur_padding",
-        type=int,
-        default=0,
-        help='Temporal Gaussian blur stack padding. Default is zero'
+        default="auto",
+        help="Frames of padding for the temporal Gaussian blur of contours. 'auto' (default) = the "
+             "filter's own radius, int(4*sigma_t + 0.5): each batch then blurs exactly as the whole "
+             "sequence would, so distributed and single-process runs get identical contours. 0 = no blur."
     )
     parser.add_argument(
         '-bz','--batch_size',
@@ -151,6 +152,11 @@ def main(args):
     # store holds just those chunks.
     detection = create_zarr(label.shape, dtype=np.bool_, store_or_path=zarr.storage.MemoryStore())
     edges = create_zarr(label.shape, dtype=np.float32, store_or_path=zarr.storage.MemoryStore())
+
+    # scipy's gaussian_filter reaches int(truncate * sigma + 0.5) frames (truncate = 4)
+    if args.blur_padding == "auto":
+        args.blur_padding = int(4.0 * sigma_t + 0.5) if sigma_t > 0 else 0
+    args.blur_padding = int(args.blur_padding)
 
     # frames to convert: the batch plus padding for temporal blurring
     first = max(time_points[0] - args.blur_padding, 0)

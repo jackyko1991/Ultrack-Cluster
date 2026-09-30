@@ -39,5 +39,5 @@ wait_for_db || exit 1
 #     -b $SLURM_ARRAY_TASK_ID -r napari-ome-zarr -el edge -dl detection
 
 # -s: temporal binning (every BINNING-th frame), the step main.sh sized the arrays with
-run_ultrack python "$ULTRACK_CLUSTER_DIR/segment.py" -p "$1" --cfg "$2" -b "$3" -e "$4" -bi "${SLURM_ARRAY_TASK_ID:?must run as a SLURM array task (sbatch --array)}" -bp 3 -s "${BINNING:-1}" \
+run_ultrack python "$ULTRACK_CLUSTER_DIR/segment.py" -p "$1" --cfg "$2" -b "$3" -e "$4" -bi "${SLURM_ARRAY_TASK_ID:?must run as a SLURM array task (sbatch --array)}" -s "${BINNING:-1}" \
     -m "${SEGMENT_MODE:-labels}" --contour-sigma "${SEGMENT_CONTOUR_SIGMA:-3.0}"
