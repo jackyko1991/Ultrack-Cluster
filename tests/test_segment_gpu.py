@@ -24,7 +24,8 @@ def test_seg_gpus_requests_gpu_partition_and_switches_pixi_env(cluster):
     assert r.returncode == 0, r.stderr
     seg = _segment(cluster)
     assert opt(seg, "--gres") == "gpu:1"
-    assert opt(seg, "--partition") == "gpu_short"
+    assert opt(seg, "--partition") == "gpu_interactive"
+    assert opt(seg, "--account") is None
     assert opt(seg, "--export") == "ALL,ULTRACK_PIXI_ENV=gpu"
     # only segment moves: the other stages stay on the CPU env and partitions
     others = [a for a in cluster.sbatch_calls() if script_of(a) != "segment.sh"]
@@ -38,6 +39,14 @@ def test_seg_gpu_env_and_partition_are_overridable(cluster):
     seg = _segment(cluster)
     assert (opt(seg, "--gres"), opt(seg, "--partition"), opt(seg, "--export")) == \
         ("gpu:2", "gpu_long", "ALL,ULTRACK_PIXI_ENV=cuda11")
+
+
+def test_gpu_account_goes_on_segment_only(cluster):
+    cluster.make_frames(6)
+    cluster.run("main.sh", BATCH_SIZE=6, SEG_GPUS=1, ULTRACK_PIXI_ENV="default", GPU_ACCOUNT="gpu_kir.prj", **FULL)
+    assert opt(_segment(cluster), "--account") == "gpu_kir.prj"
+    others = [a for a in cluster.sbatch_calls() if script_of(a) != "segment.sh"]
+    assert all(opt(a, "--account") is None for a in others)
 
 
 def test_seg_gpus_without_pixi_warns_that_env_must_have_cupy(cluster):

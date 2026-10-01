@@ -3,7 +3,6 @@ import sys
 
 from ultrack.utils import labels_to_edges
 from ultrack.utils.array import create_zarr
-from scipy.ndimage import gaussian_filter
 from ultrack import segment, load_config
 from ultrack.utils.multiprocessing import batch_index_range
 
@@ -19,6 +18,50 @@ from tqdm import tqdm
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from label_io import open_labels  # noqa: E402
+
+
+def blur_edges(edges, first, last, sigma, max_block_bytes=None):
+    """
+    Gaussian blur of ``edges[first:last + 1]`` over (t, [z,] y, x), in place.
+
+    Runs on the GPU when cupy is usable (ultrack's ``import_module`` picks
+    ``cupyx.scipy.ndimage``), else with scipy. The block is processed in
+    slabs along Y, each read with a halo of the filter's radius
+    (``int(4 * sigma_y + 0.5)``, scipy's default truncate), so the result
+    equals blurring the whole block at once, while memory stays bounded by
+    ``max_block_bytes`` (env ``SEG_BLUR_MAX_BYTES``, default 2 GiB) -- a
+    TRIF-sized batch would otherwise need ~100 GiB in one piece.
+    """
+    from ultrack.utils.cuda import import_module, to_cpu, xp
+    ndi = import_module("scipy", "ndimage")
+    if max_block_bytes is None:
+        max_block_bytes = int(os.environ.get("SEG_BLUR_MAX_BYTES", 2 * 1024 ** 3))
+    shape = edges.shape
+    y_axis = len(shape) - 2
+    n_y = shape[y_axis]
+    halo = int(4.0 * sigma[y_axis] + 0.5)
+    bytes_per_row = 4 * (last - first + 1)
+    for n in shape[1:]:
+        bytes_per_row *= n
+    bytes_per_row //= n_y
+    rows = max(1, max_block_bytes // max(bytes_per_row, 1) - 2 * halo)
+
+    def ysl(lo, hi):
+        return (slice(first, last + 1),) + (slice(None),) * (y_axis - 1) + (slice(lo, hi), slice(None))
+
+    # Writes are in place, so a slab's upper halo (rows above y0) has already
+    # been blurred by the previous slab: carry those rows' original values.
+    carry = None
+    for y0 in range(0, n_y, rows):
+        y1 = min(y0 + rows, n_y)
+        a, b = max(y0 - halo, 0), min(y1 + halo, n_y)
+        fresh = np.asarray(edges[ysl(y0, b)], dtype=np.float32)      # rows >= y0 are not written yet
+        src = np.concatenate([carry, fresh], axis=y_axis) if a < y0 else fresh
+        c0 = max(y1 - halo, a) - a
+        carry = src[(slice(None),) * y_axis + (slice(c0, y1 - a), slice(None))].copy()
+        block = ndi.gaussian_filter(xp.asarray(src), sigma=sigma)
+        keep = (slice(None),) * y_axis + (slice(y0 - a, y1 - a), slice(None))
+        edges[ysl(y0, y1)] = to_cpu(block[keep])
 
 def get_args():
     parser = argparse.ArgumentParser(description="CLI worker for ultrack segment task")
@@ -95,6 +138,22 @@ def get_args():
              "as in ultrack's own examples (e.g. Fluo-N3DL-TRIC)"
     )
     parser.add_argument(
+        '--sigma-xy',
+        dest="sigma_xy",
+        type=float,
+        default=1.0,
+        help="labels mode: spatial Gaussian sigma (px) blurring the label contours. ultrack's HeLa "
+             "example uses 4.0 (labels_to_contours(sigma=4)), which turns each cell's interior into a "
+             "smooth basin; with ~1 the interior stays flat and the hierarchy can split cells into fragments"
+    )
+    parser.add_argument(
+        '--sigma-t',
+        dest="sigma_t",
+        type=float,
+        default=1.2,
+        help="labels mode: temporal Gaussian sigma (frames); 0 = no temporal blur (as in ultrack's examples)"
+    )
+    parser.add_argument(
         '--contour-sigma',
         dest="contour_sigma",
         type=float,
@@ -143,9 +202,8 @@ def main(args):
         args.batch_index,
     ))
 
-    # TODO: exterior sigma control
-    sigma_xy = 1.0
-    sigma_t = 1.2
+    sigma_xy = args.sigma_xy
+    sigma_t = args.sigma_t
 
     # Full-length arrays, as segment() indexes them by absolute frame; only
     # this task's frames (plus blur padding) are written, so the in-memory
@@ -183,9 +241,10 @@ def main(args):
             edges[t:stop] = t_edges[:]
 
     # perform gaussian blur to create fuzzy edges in space and time (labels mode)
-    if args.mode == "labels" and sigma_t > 0 and args.blur_padding != 0:
-        sigma = [sigma_t] + [sigma_xy] * (label.ndim - 1)
-        edges[first:last + 1] = gaussian_filter(edges[first:last + 1], sigma=sigma)
+    # (spatial-only blur needs no temporal padding; temporal blur needs it)
+    if args.mode == "labels" and (sigma_xy > 0 or (sigma_t > 0 and args.blur_padding != 0)):
+        sigma = [sigma_t if args.blur_padding != 0 else 0.0] + [sigma_xy] * (label.ndim - 1)
+        blur_edges(edges, first, last, sigma)
 
     # Only batch 0 (or an unbatched run) may clear the database: ultrack
     # creates the tables in that batch and clear_all_data()s them when

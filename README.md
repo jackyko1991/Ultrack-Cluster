@@ -53,7 +53,7 @@ GPU by default. ultrack uses the GPU in two places, and only if the environment 
   from raw images with these models belongs in a GPU segment job.
 
 To run segment on GPUs: `SEG_GPUS=1 ULTRACK_PIXI_ENV=default bash main.sh`. Segment tasks then go to
-`GPU_PARTITION` (default `gpu_short`) with `--gres gpu:$SEG_GPUS` and switch to `SEG_PIXI_ENV` (default `gpu`);
+`GPU_PARTITION` (default `gpu_interactive`; on BMRC with `GPU_ACCOUNT=gpu_kir.prj`) with `--gres gpu:$SEG_GPUS` and switch to `SEG_PIXI_ENV` (default `gpu`);
 DB, link, solve and export stay on the CPU env. With `ULTRACK_SIF`, `run_ultrack` adds `--nv` on GPU
 allocations, but the image must contain cupy/CUDA torch (the current `containers/ultrack-cluster.def`
 does not). With conda/venv activation, main.sh only warns: that env must have cupy itself.

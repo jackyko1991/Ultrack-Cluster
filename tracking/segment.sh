@@ -40,4 +40,5 @@ wait_for_db || exit 1
 
 # -s: temporal binning (every BINNING-th frame), the step main.sh sized the arrays with
 run_ultrack python "$ULTRACK_CLUSTER_DIR/segment.py" -p "$1" --cfg "$2" -b "$3" -e "$4" -bi "${SLURM_ARRAY_TASK_ID:?must run as a SLURM array task (sbatch --array)}" -s "${BINNING:-1}" \
-    -m "${SEGMENT_MODE:-labels}" --contour-sigma "${SEGMENT_CONTOUR_SIGMA:-3.0}"
+    -m "${SEGMENT_MODE:-labels}" --contour-sigma "${SEGMENT_CONTOUR_SIGMA:-3.0}" \
+    --sigma-xy "${SEGMENT_SIGMA_XY:-1.0}" --sigma-t "${SEGMENT_SIGMA_T:-1.2}"

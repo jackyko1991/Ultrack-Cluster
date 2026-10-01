@@ -12,6 +12,7 @@ installed. The API itself needs none of them. Works with ultrack 0.4 and 0.8.
 """
 import argparse
 import logging
+import os
 import shutil
 import sys
 import time
@@ -48,8 +49,29 @@ def run_link(config, batch_index, overwrite):
     link(config, images=[], scale=scale, batch_index=batch_index, overwrite=overwrite)
 
 
+def require_gurobi() -> None:
+    """
+    Fail unless Gurobi is usable. ultrack itself falls back to CBC silently
+    when Gurobi is missing or unlicensed (even with solver_name = "GUROBI"),
+    and CBC can take hours to prove what Gurobi proves in minutes -- so a
+    lost licence must stop the job, not quietly change the solver.
+    ULTRACK_ALLOW_CBC=1 accepts CBC explicitly.
+    """
+    if os.environ.get("ULTRACK_ALLOW_CBC") == "1":
+        LOG.warning("ULTRACK_ALLOW_CBC=1: CBC accepted if Gurobi is unavailable")
+        return
+    import mip
+    try:
+        mip.Model(solver_name=mip.GRB)
+    except Exception as e:   # mip's InterfacingError, or a Gurobi licence error
+        raise SystemExit(f"Gurobi is not available ({e}). Set GRB_LICENSE_FILE to a valid licence "
+                         f"(BMRC: solve.sh sets the site licence), or ULTRACK_ALLOW_CBC=1 to accept CBC.")
+    LOG.info("Gurobi available (GRB_LICENSE_FILE=%s)", os.environ.get("GRB_LICENSE_FILE", "unset"))
+
+
 def run_solve(config, batch_index, overwrite):
     from ultrack import solve
+    require_gurobi()
     solve(config, batch_index, overwrite)
 
 

@@ -66,8 +66,9 @@ SHORT_PARTITION="${SHORT_PARTITION:-short}" # short/long on BMRC
 SEG_MEM_GB_PER_WORKER="${SEG_MEM_GB_PER_WORKER:-4}"
 LINK_MEM_GB_PER_WORKER="${LINK_MEM_GB_PER_WORKER:-4}"
 SEG_TIME="${SEG_TIME:-06:00:00}"
-# GPUs per segment task. 0 (default) is right for this repo's segment step:
-# labels -> contours -> hierarchies runs on CPU. Set >0 only for GPU work
+# GPUs per segment task. 0 (default): labels -> contours -> blur -> hierarchies
+# all on CPU. With >0, contours and blur run on the GPU (cupy/cucim); the
+# hierarchy stays on CPU. Set >0 only for GPU work
 # (cupy/cucim contours, ultrack.imgproc models); with the pixi runtime those
 # tasks then switch to the CUDA environment SEG_PIXI_ENV (see README "GPU").
 SEG_GPUS="${SEG_GPUS:-0}"
@@ -112,8 +113,13 @@ fi
 SEG_GPU_ARGS=()
 SEG_PARTITION="$SHORT_PARTITION"
 if (( SEG_GPUS > 0 )); then
-    SEG_PARTITION="${GPU_PARTITION:-gpu_short}"
+    # BMRC: gpu_interactive (x86, 12 h, short queue) with GPU_ACCOUNT=gpu_kir.prj;
+    # segment needs x86 (higra, ultrack's hierarchy, has no aarch64 build)
+    SEG_PARTITION="${GPU_PARTITION:-gpu_interactive}"
     SEG_GPU_ARGS=(--gres "gpu:$SEG_GPUS")
+    if [[ -n "${GPU_ACCOUNT:-}" ]]; then
+        SEG_GPU_ARGS+=(--account "$GPU_ACCOUNT")
+    fi
     if [[ -n "${ULTRACK_SIF:-}" ]]; then
         log WARN "SEG_GPUS=$SEG_GPUS with ULTRACK_SIF: the image must contain cupy/CUDA torch, or segment ignores the GPU"
     elif [[ -n "${ULTRACK_PIXI_ENV:-}" ]]; then
