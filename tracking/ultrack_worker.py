@@ -43,9 +43,19 @@ def _prepare_output(path: Path, overwrite: bool) -> None:
         shutil.rmtree(path) if path.is_dir() else path.unlink()
 
 
+def link_scale(config):
+    """Voxel scale for link distances: ULTRACK_SCALE ("z,y,x" or "y,x", e.g.
+    "11.1,1,1" for an anisotropic stack) wins over the run's metadata.toml."""
+    env = os.environ.get("ULTRACK_SCALE")
+    if env:
+        return [float(v) for v in env.split(",")]
+    return getattr(config.data_config, "metadata", {}).get("scale")
+
+
 def run_link(config, batch_index, overwrite):
     from ultrack import link
-    scale = getattr(config.data_config, "metadata", {}).get("scale")
+    scale = link_scale(config)
+    LOG.info("link scale: %s", scale)
     link(config, images=[], scale=scale, batch_index=batch_index, overwrite=overwrite)
 
 

@@ -147,6 +147,14 @@ def get_args():
              "smooth basin; with ~1 the interior stays flat and the hierarchy can split cells into fragments"
     )
     parser.add_argument(
+        '--sigma-z',
+        dest="sigma_z",
+        type=float,
+        default=None,
+        help="labels mode, Z-stacks: Z Gaussian sigma (slices); default = --sigma-xy. For anisotropic "
+             "stacks use sigma_xy / anisotropy (e.g. 4 / 11 for Fluo-N3DH-CE)"
+    )
+    parser.add_argument(
         '--sigma-t',
         dest="sigma_t",
         type=float,
@@ -243,7 +251,10 @@ def main(args):
     # perform gaussian blur to create fuzzy edges in space and time (labels mode)
     # (spatial-only blur needs no temporal padding; temporal blur needs it)
     if args.mode == "labels" and (sigma_xy > 0 or (sigma_t > 0 and args.blur_padding != 0)):
-        sigma = [sigma_t if args.blur_padding != 0 else 0.0] + [sigma_xy] * (label.ndim - 1)
+        spatial = [sigma_xy] * (label.ndim - 1)
+        if label.ndim == 4:      # (T, Z, Y, X)
+            spatial[0] = sigma_xy if args.sigma_z is None else args.sigma_z
+        sigma = [sigma_t if args.blur_padding != 0 else 0.0] + spatial
         blur_edges(edges, first, last, sigma)
 
     # Only batch 0 (or an unbatched run) may clear the database: ultrack
