@@ -347,17 +347,25 @@ run_db_server() {
     fi
     load_postgres || return 1
     mkdir -p "$socket_dir"
+    chmod 700 "$socket_dir"           # the socket is trusted (below): only this user may reach it
     rm -f "$socket_dir"/.s.PGSQL.*
 
     if [[ "$mode" == create ]]; then
         rm -rf "$db_dir"
         mkdir -p "$db_dir"
         run_ultrack initdb -D "$db_dir" || return 1
-        echo "host    all             $USER           samenet                 md5" >> "$db_dir/pg_hba.conf"
     elif [[ ! -d "$db_dir" ]]; then
         log ERROR "no database to resume at $db_dir (run create_server.sh first)"
         return 1
     fi
+    # Written on every start (also tightens databases created by older versions): only this
+    # user, password required over TCP -- loopback included (initdb's default trusts loopback,
+    # i.e. any user on the node) -- and trust only on the private Unix socket.
+    printf '%s\n' \
+        "local   all   $USER                    trust" \
+        "host    all   $USER   127.0.0.1/32     md5" \
+        "host    all   $USER   ::1/128          md5" \
+        "host    all   $USER   samenet          md5" > "$db_dir/pg_hba.conf"
 
     local port
     port=$(find_free_port 5432 100) || return 1
@@ -378,11 +386,13 @@ run_db_server() {
 
     if [[ "$mode" == create ]]; then
         run_ultrack createdb -h "$socket_dir" -p "$port" "$db_name" || return 1
-        # SQL on stdin (printf is a builtin): the password never appears in a
-        # process's argv, which any user on the node can read with ps
-        printf 'ALTER USER "%s" PASSWORD '"'"'%s'"'"';\n' "$USER" "${ULTRACK_DB_PW//\'/\'\'}" \
-            | run_ultrack psql -q -v ON_ERROR_STOP=1 -h "$socket_dir" -p "$port" "$db_name" || return 1
     fi
+    # Set this run's password on every start, resume included: each launch draws a fresh one,
+    # and a resumed server that kept the old password locked its own solve jobs out.
+    # SQL on stdin (printf is a builtin): the password never appears in a process's argv,
+    # which any user on the node can read with ps.
+    printf 'ALTER USER "%s" PASSWORD '"'"'%s'"'"';\n' "$USER" "${ULTRACK_DB_PW//\'/\'\'}" \
+        | run_ultrack psql -q -v ON_ERROR_STOP=1 -h "$socket_dir" -p "$port" "$db_name" || return 1
 
     local addr="$USER:$ULTRACK_DB_PW@$host:$port/$db_name?gssencmode=disable"
     ${DASEL_BIN:-dasel} put -t string -f "$cfg" -v "$addr" "data.address" || return 1

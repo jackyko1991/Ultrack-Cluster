@@ -83,6 +83,37 @@ def test_real_server_lifecycle(tmp_path):
         proc.wait(timeout=60)
 
 
+def test_resume_takes_the_new_runs_password(tmp_path):
+    """Every launch gets a fresh random DB password; a resumed server must accept the new one
+    (it kept the old one, so the resumed solve jobs failed to log in) and refuse the old one."""
+    workdir = tmp_path / "tracking"
+    shutil.copytree(REPO / "tracking", workdir)
+    ready = tmp_path / "ready"
+    env = {**os.environ, "ULTRACK_DB_PW": "first-pw", "JOB_NAME": "pwtest",
+           "ULTRACK_WORK_DIR": str(tmp_path / "work"), "ULTRACK_PG_MODULE": "",
+           "ULTRACK_DB_READY_FILE": str(ready),
+           "SLURM_MEM_PER_NODE": "2048", "SLURM_CPUS_PER_TASK": "2"}
+    for k in ["SLURM_JOB_NODELIST", "ULTRACK_SIF"]:
+        env.pop(k, None)
+    proc = _start(workdir, "create_server.sh", env)
+    try:
+        _wait_ready(ready, proc)
+    finally:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=60)
+
+    proc = _start(workdir, "resume_server.sh", {**env, "ULTRACK_DB_PW": "second-pw"})
+    try:
+        hp = _wait_ready(ready, proc)
+        new = _query(hp, "second-pw", "select 1")
+        assert new.returncode == 0 and new.stdout.strip() == "1", new.stderr
+        assert _query(hp, "first-pw", "select 1").returncode != 0
+        assert _query(hp, "wrong", "select 1").returncode != 0
+    finally:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=60)
+
+
 def test_real_ephemeral_server_runs_without_fsync(tmp_path):
     workdir = tmp_path / "tracking"
     shutil.copytree(REPO / "tracking", workdir)
