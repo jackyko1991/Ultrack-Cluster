@@ -12,6 +12,7 @@ installed. The API itself needs none of them. Works with ultrack 0.4 and 0.8.
 """
 import argparse
 import logging
+import re
 import os
 import shutil
 import sys
@@ -19,6 +20,29 @@ import time
 from pathlib import Path
 
 LOG = logging.getLogger("ultrack-cluster")
+
+_CREDENTIAL = re.compile(r"([A-Za-z0-9_.%-]+):([^@\s'\"/]+)@")
+
+
+class RedactSecrets(logging.Filter):
+    """Mask the password of ``user:password@host`` in every log record: ultrack
+    logs its whole config at INFO, including the coordination DB address."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        masked = _CREDENTIAL.sub(r"\1:***@", msg)
+        if masked != msg:
+            record.msg, record.args = masked, ()
+        return True
+
+
+def setup_logging() -> None:
+    logging.basicConfig(level=logging.INFO, stream=sys.stdout,
+                        format="%(asctime)s [%(levelname)-5s] [%(name)s] %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S")
+    for handler in logging.getLogger().handlers:
+        if not any(isinstance(f, RedactSecrets) for f in handler.filters):
+            handler.addFilter(RedactSecrets())
 
 
 def parse_args(argv=None):
@@ -101,9 +125,7 @@ def run_export(config, out_dir: Path, overwrite: bool):
 
 def main(argv=None) -> int:
     args = parse_args(argv)
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout,
-                        format="%(asctime)s [%(levelname)-5s] [%(name)s] %(message)s",
-                        datefmt="%Y-%m-%d %H:%M:%S")
+    setup_logging()
     from ultrack.config import load_config
     config = load_config(args.config)
     start = time.time()

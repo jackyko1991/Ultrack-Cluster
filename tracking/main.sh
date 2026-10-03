@@ -105,6 +105,12 @@ NUM_WINDOWS=$(last_batch_index "$DS_LENGTH" "$WINDOW_SIZE")
 # segment() splits the T frames; link() splits range(max_t) = the T-1 pairs.
 SEG_WORKERS=$($DASEL_BIN -f "$CFG_FILE" "segmentation.n_workers")
 LINK_WORKERS=$($DASEL_BIN -f "$CFG_FILE" "linking.n_workers")
+# The export job paints frames with a pool of data.n_workers processes: request
+# that many CPUs (it ran 8 workers on 1 CPU), unless EXPORT_CPUS overrides it.
+# Memory: each worker holds one full int32 frame plus its masks; set EXPORT_MEM.
+if [[ -z "${EXPORT_CPUS:-}" ]]; then
+    EXPORT_CPUS=$($DASEL_BIN -f "$CFG_FILE" "data.n_workers" 2>/dev/null) || EXPORT_CPUS=1
+fi
 SEG_LAST=$(last_batch_index "$TIME_STEPS_BINNED" "$SEG_WORKERS")
 LINK_LAST=$(last_batch_index "$DS_LENGTH" "$LINK_WORKERS")
 if [[ "$($DASEL_BIN -f "$CFG_FILE" "tracking.n_threads")" == 0 ]]; then
@@ -263,7 +269,7 @@ else
 fi
 
 EXPORT_JOB_ID=$(submit export --partition "$SHORT_PARTITION" --job-name "EXPORT_$JOB_NAME" --output "$LOG_DIR/export-%j.out" \
-    --mem "$EXPORT_MEM" --time "$EXPORT_TIME" \
+    --mem "$EXPORT_MEM" --cpus-per-task "$EXPORT_CPUS" --time "$EXPORT_TIME" \
     -d "$export_dep" --kill-on-invalid-dep=yes "$ULTRACK_CLUSTER_DIR/export.sh" "$CFG_FILE" "$RESULTS_DIR")
 
 # Stop the DB server once export ends in any state (upstream failures cancel
