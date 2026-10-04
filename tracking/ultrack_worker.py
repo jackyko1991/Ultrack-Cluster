@@ -103,9 +103,28 @@ def require_gurobi() -> None:
     LOG.info("Gurobi available (GRB_LICENSE_FILE=%s)", os.environ.get("GRB_LICENSE_FILE", "unset"))
 
 
+def coerce_lp_method():
+    """Make ``tracking.method`` reach the solver. ultrack assigns it to python-mip's
+    ``Model.lp_method`` as a plain int, but python-mip compares that with ``LP_Method`` enum
+    members (``1 != LP_Method.DUAL``), so every value fell through to Gurobi Method=3
+    (concurrent) and the setting was ignored. Ints are converted to ``LP_Method`` here."""
+    import mip
+    prop = mip.Model.lp_method
+    if getattr(prop.fset, "_coerces_int", False):
+        return
+
+    def fset(self, value, _orig=prop.fset):
+        _orig(self, mip.LP_Method(value) if isinstance(value, int) else value)
+
+    fset._coerces_int = True
+    mip.Model.lp_method = property(prop.fget, fset, prop.fdel, prop.__doc__)
+
+
 def run_solve(config, batch_index, overwrite):
     from ultrack import solve
     require_gurobi()
+    coerce_lp_method()
+    LOG.info("LP method for the root relaxation: tracking.method = %s", config.tracking_config.method)
     solve(config, batch_index, overwrite)
 
 
