@@ -114,6 +114,51 @@ def test_resume_takes_the_new_runs_password(tmp_path):
         proc.wait(timeout=60)
 
 
+def test_create_refuses_to_wipe_an_existing_database(tmp_path):
+    """A new run over an existing database (e.g. a relaunch that forgot SKIP_SEG/SKIP_LINK)
+    must not delete its candidates and links; ULTRACK_DB_RECREATE=true allows it."""
+    workdir = tmp_path / "tracking"
+    shutil.copytree(REPO / "tracking", workdir)
+    ready = tmp_path / "ready"
+    env = {**os.environ, "ULTRACK_DB_PW": "pw", "JOB_NAME": "keep",
+           "ULTRACK_WORK_DIR": str(tmp_path / "work"), "ULTRACK_PG_MODULE": "",
+           "ULTRACK_DB_READY_FILE": str(ready),
+           "SLURM_MEM_PER_NODE": "1024", "SLURM_CPUS_PER_TASK": "1"}
+    for k in ["SLURM_JOB_NODELIST", "ULTRACK_SIF", "ULTRACK_DB_RECREATE", "ULTRACK_DB_EPHEMERAL"]:
+        env.pop(k, None)
+    proc = _start(workdir, "create_server.sh", env)
+    try:
+        hp = _wait_ready(ready, proc)
+        assert _query(hp, "pw", "create table kept (x int); insert into kept values (7)").returncode == 0
+    finally:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=60)
+    ready.unlink(missing_ok=True)
+
+    proc = _start(workdir, "create_server.sh", env)
+    out, _ = proc.communicate(timeout=120)
+    assert proc.returncode != 0 and "already exists" in (out or "")
+    assert (tmp_path / "work" / "postgresql_ultrack_keep" / "PG_VERSION").exists()
+
+    proc = _start(workdir, "resume_server.sh", env)
+    try:
+        hp = _wait_ready(ready, proc)
+        got = _query(hp, "pw", "select x from kept")
+        assert got.returncode == 0 and got.stdout.strip() == "7", got.stderr
+    finally:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=60)
+    ready.unlink(missing_ok=True)
+
+    proc = _start(workdir, "create_server.sh", {**env, "ULTRACK_DB_RECREATE": "true"})
+    try:
+        hp = _wait_ready(ready, proc)
+        assert _query(hp, "pw", "select x from kept").returncode != 0      # wiped, as asked
+    finally:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=60)
+
+
 def test_real_ephemeral_server_runs_without_fsync(tmp_path):
     workdir = tmp_path / "tracking"
     shutil.copytree(REPO / "tracking", workdir)

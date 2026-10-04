@@ -351,6 +351,14 @@ run_db_server() {
     rm -f "$socket_dir"/.s.PGSQL.*
 
     if [[ "$mode" == create ]]; then
+        # an existing database holds a run's candidates and links (hours of
+        # segment/link work): never wipe it implicitly -- resume it, or ask
+        if [[ -e "$db_dir/PG_VERSION" && "${ULTRACK_DB_EPHEMERAL:-false}" != true \
+              && "${ULTRACK_DB_RECREATE:-false}" != true ]]; then
+            log ERROR "a database already exists at $db_dir: resume it (SKIP_SEG=true SKIP_LINK=true," \
+                "resume_server.sh) or set ULTRACK_DB_RECREATE=true to delete it and start over"
+            return 1
+        fi
         rm -rf "$db_dir"
         mkdir -p "$db_dir"
         run_ultrack initdb -D "$db_dir" || return 1
