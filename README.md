@@ -24,6 +24,18 @@ Ultrack solves linear programming with [Gurobi](https://www.gurobi.com/). For un
 
 ultrack reaches Gurobi through python-mip, which needs `GRB_LICENSE_FILE` and otherwise silently falls back to the much slower CBC solver. `solve.sh` sets it to BMRC's token-server license (`/gpfs3/apps/eb/licenses/gurobi.lic`) automatically; point it elsewhere with `ULTRACK_GUROBI_LICENSE=<file>`. (The old `module load Gurobi/10.0.1-GCCcore-12.2.0` no longer exists on BMRC.)
 
+### Solver Settings for Large Problems
+The tracking problem is an integer linear program (ILP) whose size grows with the candidate segments and links in a solve window. In the pyCyto benchmark it ranged from 2.7 × 10<sup>5</sup> binary variables (Fluo-N2DL-HeLa 01, 92 frames) to 1.9 × 10<sup>7</sup> (Fluo-N3DL-TRIF 02, one 70-frame window).
+
+By default Gurobi solves the root LP relaxation with primal simplex, dual simplex and barrier running concurrently and keeps the first to finish. In every one of these solves a simplex method finished first. For TRIF 02 the barrier alone built a 2.4 × 10<sup>9</sup>-nonzero factorisation (about 30 GB) over 18 min before being discarded. For large windows, solve the root relaxation with dual simplex only:
+
+```toml
+[tracking]
+method = 1    # root LP: dual simplex (python-mip LP_Method.DUAL, Gurobi Method=1)
+```
+
+This changes neither the model nor its optimum. Note that ultrack passes `method` to python-mip as a plain integer, which python-mip does not recognise, so with ultrack alone every value falls back to Gurobi `Method=3` (concurrent); `ultrack_worker.py solve` converts it (`coerce_lp_method`), and the solve log reports `Set parameter Method to value 1`.
+
 ### Runtime Environment
 Each job activates its environment itself, so nothing needs to be active in the shell that runs `main.sh`. Pick one (first match wins):
 
