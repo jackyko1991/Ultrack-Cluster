@@ -70,7 +70,7 @@ SEG_TIME="${SEG_TIME:-06:00:00}"
 # all on CPU. With >0, contours and blur run on the GPU (cupy/cucim); the
 # hierarchy stays on CPU. Set >0 only for GPU work
 # (cupy/cucim contours, ultrack.imgproc models); with the pixi runtime those
-# tasks then switch to the CUDA environment SEG_PIXI_ENV (see README "GPU").
+# tasks then switch to the CUDA environment SEG_PIXI_ENV (see docs/installation.md#gpu).
 SEG_GPUS="${SEG_GPUS:-0}"
 SEG_PIXI_ENV="${SEG_PIXI_ENV:-gpu}"
 LINK_TIME="${LINK_TIME:-06:00:00}"

@@ -105,7 +105,7 @@ def test_address_is_not_published_if_server_never_becomes_ready(cluster):
 
 
 def test_config_file_can_come_from_environment(cluster):
-    # manual_run.md documents `export CFG_FILE=...; sbatch create_server.sh`
+    # docs/manual-run.md documents `export CFG_FILE=...; sbatch create_server.sh`
     _setup(cluster)
     r = cluster.run("create_server.sh", **_db_env(cluster, CFG_FILE="config.toml"))
     assert r.returncode == 0, r.stderr

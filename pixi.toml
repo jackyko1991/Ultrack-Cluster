@@ -5,7 +5,7 @@ channels = ["conda-forge"]
 platforms = ["linux-64"]
 
 # Everything a job needs. Jobs activate it with ULTRACK_PIXI_ENV=<env>
-# (see README "Runtime Environment").
+# (see docs/installation.md).
 #
 # Environments (kept separate so CPU stages never pull CUDA):
 #   default  CPU only. Every stage in this repo: segment (labels -> contours

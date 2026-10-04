@@ -6,7 +6,7 @@ From: condaforge/miniforge3:24.3.0-0
 # on BMRC), a hand-installed dasel, or a conda env on the submitting shell.
 #
 # Build:  apptainer build --fakeroot ultrack-cluster.sif containers/ultrack-cluster.def
-# Use:    export ULTRACK_SIF=$PWD/ultrack-cluster.sif   (see README)
+# Use:    export ULTRACK_SIF=$PWD/ultrack-cluster.sif   (see docs/installation.md)
 #
 # Versions match the BMRC `ultrack` conda env that produced the 2026-09-30
 # smoke test (ultrack at royerlab/ultrack@5dc7839, Python 3.10, zarr 2.x).
